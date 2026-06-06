@@ -20,7 +20,13 @@
   command -v cmux >/dev/null 2>&1 && cmux notify --title "$project" --body "$body" </dev/null >/dev/null 2>&1 || true
 
   if command -v terminal-notifier >/dev/null 2>&1; then
-    terminal-notifier -title "✅ $project" -message "$body" -sound Glass </dev/null >/dev/null 2>&1 || true
+    # -group: rapid commits in the same repo collapse into one notification instead
+    # of stacking. -ignoreDnD: show even in a Focus/Do-Not-Disturb mode. How LONG it
+    # stays on screen is macOS-controlled by the notification *style* for the
+    # terminal-notifier sender (Banner = auto-dismiss ~5s; Alert = until dismissed) —
+    # set it once in System Settings > Notifications > terminal-notifier > Alerts.
+    terminal-notifier -title "✅ $project" -message "$body" \
+      -group "dotcalum-commit-$project" -sound Glass -ignoreDnD </dev/null >/dev/null 2>&1 || true
   elif command -v osascript >/dev/null 2>&1; then
     safe="${body//\"/}"   # strip quotes so the AppleScript string can't break
     osascript -e "display notification \"$safe\" with title \"$project\" sound name \"Glass\"" >/dev/null 2>&1 || true
