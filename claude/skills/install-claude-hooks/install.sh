@@ -32,6 +32,11 @@ echo "Installing claude wrapper + pre-session hook from $REPO"
 link "$HOOK_SRC"   "$CLAUDE_HOOKS/pre-session.sh"
 link "$SKILL_SRC"  "$CLAUDE_SKILLS/install-claude-hooks"
 
+# Hook timing dispatcher: symlink it in, then idempotently route Calum's personal
+# Claude hooks through it so each one is timed into the shared hooks log.
+link "$REPO/claude/hooks/dispatch.sh" "$CLAUDE_HOOKS/dispatch.sh"
+bash "$REPO/claude/hooks/wire-timing.sh" "$HOME/.claude/settings.json" || true
+
 # Wire the wrapper into the shell (idempotent: match by stable path tail so the
 # check holds whether the existing line uses $HOME or a resolved absolute path).
 if [ -f "$RC" ] && grep -qF "claude/shell/claude-wrapper.zsh" "$RC"; then

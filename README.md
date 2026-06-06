@@ -4,15 +4,31 @@ My dotfiles, configs, and other bits worth sharing across machines.
 
 ## Contents
 
+### Hook timing (centralized)
+
+Every git hook and every personal Claude Code hook is routed through a single
+dispatcher that times each one and appends a JSONL line to one shared log:
+`~/.local/state/hooks/timing.jsonl` (`{ts,source,scope,event,step,ms,exit}`).
+See it live with `tail -f ~/.local/state/hooks/timing.jsonl | jq .`.
+
+| Path | What it does |
+|---|---|
+| `lib/hooklog.sh` | Shared timing/logging primitive both dispatchers source. Millisecond clock (free via bash5 `$EPOCHREALTIME`, perl fallback) + `hooklog_step`. Swallows its own errors so it can never break a commit or a Claude turn. |
+| `git/hooks/_dispatch` | Centralized git-hook dispatcher. Every hook name symlinks to it (installed via global `core.hooksPath`). Runs `handlers.d/<hook>/NN-*.sh` in order (drop a file to extend — never edit the dispatcher), times each + the repo's own delegated hook, then chains to it. Gating hooks (`pre-*`, `commit-msg`) fail-fast; `post-*` run everything. |
+| `git/hooks/handlers.d/post-commit/` | Current post-commit handlers: `10-lolcommits.sh` (webcam commit selfie), `20-cmux-notify.sh` (cmux toast when committing inside cmux). |
+| `git/install.sh` | Points global `core.hooksPath` at `git/hooks`, (re)creates the hook symlinks, backs up any previous global hooks dir. Idempotent. |
+| `shell/claude-wrapper.zsh` | Launch wrapper sourced from `~/.aliases`. Makes `claude` and `c` identical — both always run with `--dangerously-skip-permissions`; `cc` is the escape hatch (no skip). Every launch first runs the pre-session lifecycle hook. `command claude` bypasses the functions to the real binary, so no recursion and cmux integration is preserved. |
+| `claude/hooks/dispatch.sh` | Transparent Claude-hook timing wrapper: `dispatch.sh <Event> <label> <cmd...>` runs the real hook with stdin/stdout/exit inherited (Claude's hook protocol untouched), times it, logs one line. |
+| `claude/hooks/wire-timing.sh` | Idempotent jq transform that routes Calum's **personal** `settings.json` hooks through `dispatch.sh`. Leaves externally-managed hooks (NotchBar, tagged `# notchbar-`) alone. Backs up + validates before replacing. |
+| `claude/hooks/pre-session.sh` | Pre-session lifecycle hook. Runs once before every `claude`/`c`/`cc` launch (before the actual session starts), receives the launch args, best-effort (exit code doesn't block). Edit it to run anything you want before any session. |
+| `skills/install-claude-hooks/` | Skill + `install.sh` to symlink the wrapper sourcing, pre-session hook, `dispatch.sh`, and this skill into `~/.claude`, and run `wire-timing.sh`. Idempotent. |
+
 ### `claude/`
 
 [Claude Code](https://claude.com/claude-code) setup. Symlink these into `~/.claude/`.
 
 | Path | What it does |
 |---|---|
-| `shell/claude-wrapper.zsh` | Launch wrapper sourced from `~/.aliases`. Makes `claude` and `c` identical — both always run with `--dangerously-skip-permissions`; `cc` is the escape hatch (no skip). Every launch first runs the pre-session lifecycle hook. `command claude` bypasses the functions to the real binary, so no recursion and cmux integration is preserved. |
-| `hooks/pre-session.sh` | Pre-session lifecycle hook. Runs once before every `claude`/`c`/`cc` launch (before the actual session starts), receives the launch args, best-effort (exit code doesn't block). Edit it to run anything you want before any session. |
-| `skills/install-claude-hooks/` | Skill + `install.sh` to symlink the wrapper sourcing, pre-session hook, and this skill into `~/.claude`. Idempotent. |
 | `hooks/rename-workspace-nudge.sh` | `UserPromptSubmit` hook that nudges Claude to re-title the current [cmux](https://github.com/manaflow-ai/cmux) workspace when the title no longer matches the work. |
 | `skills/rename-workspace/` | Skill + script to rename the current cmux workspace title (and log the rename to the workspace↔session map for `cwr`). |
 | `skills/move-to-new-workspace/` | Skill to split the current cmux tab out into a brand-new workspace. |
@@ -29,7 +45,11 @@ My dotfiles, configs, and other bits worth sharing across machines.
 git clone https://github.com/0x63616c/dotcalum.git
 cd dotcalum
 
-# Claude launch wrapper + pre-session hook (symlinks + wires ~/.aliases)
+# Centralized git-hook dispatcher (sets global core.hooksPath, times every hook)
+./git/install.sh
+
+# Claude launch wrapper + pre-session hook + hook-timing dispatcher
+# (symlinks, wires ~/.aliases, routes personal settings.json hooks through dispatch.sh)
 ./claude/skills/install-claude-hooks/install.sh   # then run `reload`
 
 # Claude hooks + skills

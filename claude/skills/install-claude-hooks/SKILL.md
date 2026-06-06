@@ -22,6 +22,9 @@ Idempotent. It:
 1. Symlinks `claude/hooks/pre-session.sh` → `~/.claude/hooks/pre-session.sh` (backs up a real file first).
 2. Symlinks this skill → `~/.claude/skills/install-claude-hooks`.
 3. Appends a `source .../claude/shell/claude-wrapper.zsh` line to `~/.aliases` if missing.
+4. Symlinks `claude/hooks/dispatch.sh` → `~/.claude/hooks/dispatch.sh` and runs `wire-timing.sh` to route Calum's personal `settings.json` hooks through it (NotchBar's hooks are left alone). Each hook is then timed into `~/.local/state/hooks/timing.jsonl`.
+
+> Git hooks are a separate installer: `./git/install.sh` (sets global `core.hooksPath`). Both log to the same file.
 
 Pass a different shell file as `$1` to source from somewhere other than `~/.aliases`.
 
