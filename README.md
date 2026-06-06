@@ -16,6 +16,15 @@ My dotfiles, configs, and other bits worth sharing across machines.
 
 > The workspace skills/hook need [cmux](https://github.com/manaflow-ai/cmux) on the machine.
 
+### `cmux/`
+
+[cmux](https://github.com/manaflow-ai/cmux) settings. Symlink (or copy) into `~/.config/cmux/`.
+
+| Path | What it does |
+|---|---|
+| `cmux.json` | cmux config (JSONC template — uncomment settings to make them file-managed). |
+| `settings.json` | cmux settings; takes precedence over the Application Support fallback. |
+
 ## Install
 
 ```bash
@@ -26,6 +35,10 @@ cd dotcalum
 ln -s "$PWD/claude/hooks/rename-workspace-nudge.sh"        ~/.claude/hooks/
 ln -s "$PWD/claude/skills/rename-workspace"                ~/.claude/skills/rename-workspace
 ln -s "$PWD/claude/skills/move-to-new-workspace"           ~/.claude/skills/move-to-new-workspace
+
+# cmux settings
+ln -s "$PWD/cmux/cmux.json"                                ~/.config/cmux/cmux.json
+ln -s "$PWD/cmux/settings.json"                            ~/.config/cmux/settings.json
 ```
 
 Then wire the hook into `~/.claude/settings.json` under `hooks.UserPromptSubmit`:
