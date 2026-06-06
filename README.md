@@ -10,6 +10,9 @@ My dotfiles, configs, and other bits worth sharing across machines.
 
 | Path | What it does |
 |---|---|
+| `shell/claude-wrapper.zsh` | Launch wrapper sourced from `~/.aliases`. Makes `claude` and `c` identical — both always run with `--dangerously-skip-permissions`; `cc` is the escape hatch (no skip). Every launch first runs the pre-session lifecycle hook. `command claude` bypasses the functions to the real binary, so no recursion and cmux integration is preserved. |
+| `hooks/pre-session.sh` | Pre-session lifecycle hook. Runs once before every `claude`/`c`/`cc` launch (before the actual session starts), receives the launch args, best-effort (exit code doesn't block). Edit it to run anything you want before any session. |
+| `skills/install-claude-hooks/` | Skill + `install.sh` to symlink the wrapper sourcing, pre-session hook, and this skill into `~/.claude`. Idempotent. |
 | `hooks/rename-workspace-nudge.sh` | `UserPromptSubmit` hook that nudges Claude to re-title the current [cmux](https://github.com/manaflow-ai/cmux) workspace when the title no longer matches the work. |
 | `skills/rename-workspace/` | Skill + script to rename the current cmux workspace title (and log the rename to the workspace↔session map for `cwr`). |
 | `skills/move-to-new-workspace/` | Skill to split the current cmux tab out into a brand-new workspace. |
@@ -25,6 +28,9 @@ My dotfiles, configs, and other bits worth sharing across machines.
 ```bash
 git clone https://github.com/0x63616c/dotcalum.git
 cd dotcalum
+
+# Claude launch wrapper + pre-session hook (symlinks + wires ~/.aliases)
+./claude/skills/install-claude-hooks/install.sh   # then run `reload`
 
 # Claude hooks + skills
 ln -s "$PWD/claude/hooks/rename-workspace-nudge.sh"        ~/.claude/hooks/
