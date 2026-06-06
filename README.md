@@ -16,7 +16,10 @@ See it live with `tail -f ~/.local/state/hooks/timing.jsonl | jq .`.
 | `lib/hooklog.sh` | Shared timing/logging primitive both dispatchers source. Millisecond clock (free via bash5 `$EPOCHREALTIME`, perl fallback) + `hooklog_step`. Swallows its own errors so it can never break a commit or a Claude turn. |
 | `git/hooks/_dispatch` | Centralized git-hook dispatcher. Every hook name symlinks to it (installed via global `core.hooksPath`). Runs `handlers.d/<hook>/NN-*.sh` in order (drop a file to extend — never edit the dispatcher), times each + the repo's own delegated hook, then chains to it. Gating hooks (`pre-*`, `commit-msg`) fail-fast; `post-*` run everything. |
 | `git/hooks/handlers.d/post-commit/` | Current post-commit handlers: `10-lolcommits.sh` (webcam commit selfie), `20-cmux-notify.sh` (cmux toast when committing inside cmux). |
-| `git/install.sh` | Points global `core.hooksPath` at `git/hooks`, (re)creates the hook symlinks, backs up any previous global hooks dir. Idempotent. |
+| `git/reconcile-hooks.sh` | **Capture-and-delegate**, so the dispatcher fronts EVERY repo even when beads/lefthook/husky claim a repo-local `core.hooksPath`. Saves the tool's path into `hooks.delegate`, unsets the local override (our dispatcher then delegates back to the tool — nothing breaks). Idempotent + reversible: `--all` (sweep), `--restore [repo]`, `--status`. Opt a repo out with `git config hooks.optout true`. |
+| `shell/git-hooks-shell.zsh` | Self-heal triggers sourced from `~/.aliases`: zsh `chpwd` + a `git` wrapper (reconciles before commit/push/merge) + a `bd` shim. Current-repo-only, fail-open. |
+| `git/launchd/…plist.template` | Background launchd sweep (`com.calum.git-hooks-reconcile`, every 600s) that re-captures any stray override across all repos. `install.sh` fills in paths and loads it. |
+| `git/install.sh` | Points global `core.hooksPath` at `git/hooks`, (re)creates the hook symlinks, wires the shell self-heal into `~/.aliases`, installs+loads the launchd sweep, and runs an initial capture sweep. Idempotent. |
 | `shell/claude-wrapper.zsh` | Launch wrapper sourced from `~/.aliases`. Makes `claude` and `c` identical — both always run with `--dangerously-skip-permissions`; `cc` is the escape hatch (no skip). Every launch first runs the pre-session lifecycle hook. `command claude` bypasses the functions to the real binary, so no recursion and cmux integration is preserved. |
 | `claude/hooks/dispatch.sh` | Transparent Claude-hook timing wrapper: `dispatch.sh <Event> <label> <cmd...>` runs the real hook with stdin/stdout/exit inherited (Claude's hook protocol untouched), times it, logs one line. |
 | `claude/hooks/wire-timing.sh` | Idempotent jq transform that routes Calum's **personal** `settings.json` hooks through `dispatch.sh`. Leaves externally-managed hooks (NotchBar, tagged `# notchbar-`) alone. Backs up + validates before replacing. |
@@ -45,7 +48,8 @@ See it live with `tail -f ~/.local/state/hooks/timing.jsonl | jq .`.
 git clone https://github.com/0x63616c/dotcalum.git
 cd dotcalum
 
-# Centralized git-hook dispatcher (sets global core.hooksPath, times every hook)
+# Centralized git-hook dispatcher: sets global core.hooksPath, times every hook,
+# wires the self-heal (shell + launchd), and captures repos that claim core.hooksPath
 ./git/install.sh
 
 # Claude launch wrapper + pre-session hook + hook-timing dispatcher

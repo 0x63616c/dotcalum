@@ -32,6 +32,36 @@ fi
 git config --global core.hooksPath "$HOOKS_DIR"
 echo "core.hooksPath -> $HOOKS_DIR"
 echo "hooks log       -> ${HOOKS_LOG:-$HOME/.local/state/hooks/timing.jsonl}"
+
+chmod +x "$SCRIPT_DIR/reconcile-hooks.sh"
+
+# --- self-heal: keep our dispatcher in front of repos that claim core.hooksPath ---
+# 1) Shell integration (chpwd + git wrapper + bd shim), sourced from ~/.aliases.
+RC="${1:-$HOME/.aliases}"
+SHELL_SRC="$(cd "$SCRIPT_DIR/.." && pwd)/shell/git-hooks-shell.zsh"
+if [ -f "$RC" ] && grep -qF "shell/git-hooks-shell.zsh" "$RC"; then
+  echo "  $RC already sources the git-hooks shell integration"
+else
+  printf '\n# dotcalum: keep global git-hook dispatcher in front of every repo (self-heal)\nsource "%s"\n' "$SHELL_SRC" >> "$RC"
+  echo "  appended git-hooks shell source to $RC"
+fi
+
+# 2) Background launchd sweep (re-captures stray overrides every few minutes).
+LA_DIR="$HOME/Library/LaunchAgents"
+PLIST="$LA_DIR/com.calum.git-hooks-reconcile.plist"
+mkdir -p "$LA_DIR" "$HOME/.local/state/hooks"
+sed -e "s#__SCRIPT__#$SCRIPT_DIR/reconcile-hooks.sh#g" -e "s#__HOME__#$HOME#g" \
+  "$SCRIPT_DIR/launchd/com.calum.git-hooks-reconcile.plist.template" > "$PLIST"
+launchctl bootout "gui/$(id -u)/com.calum.git-hooks-reconcile" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null \
+  && echo "  loaded launchd sweep (com.calum.git-hooks-reconcile, every 600s)" \
+  || echo "  (could not bootstrap launchd; load manually: launchctl bootstrap gui/$(id -u) $PLIST)"
+
+# 3) Initial sweep so currently-overridden repos are captured now.
+echo "  initial sweep:"
+bash "$SCRIPT_DIR/reconcile-hooks.sh" --all | sed 's/^/    /'
+
 echo
-echo "Note: repos with their own core.hooksPath (lefthook, beads' .beads/hooks, husky)"
-echo "bypass this global dispatcher and are not timed."
+echo "Done. Repos with their own core.hooksPath (beads/lefthook/husky) are now captured:"
+echo "their hooks run via our dispatcher's delegation (hooks.delegate). Opt a repo out"
+echo "with 'git config hooks.optout true'; undo a capture with 'reconcile-hooks.sh --restore'."
