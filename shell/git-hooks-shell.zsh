@@ -28,7 +28,11 @@ autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook chpwd _dotcalum_reconcile_
 # hooks calling `git` are unaffected.
 git() {
   case "${1:-}" in
-    commit|push|merge|rebase|cherry-pick|revert|am) _dotcalum_reconcile_cwd ;;
+    # Guard the call: if only this wrapper survived into a shell snapshot without the
+    # helper (e.g. Claude Code's tool shell), a bare call would print "command not
+    # found" on every git invocation. typeset -f makes a missing helper a silent no-op.
+    commit|push|merge|rebase|cherry-pick|revert|am)
+      typeset -f _dotcalum_reconcile_cwd >/dev/null 2>&1 && _dotcalum_reconcile_cwd ;;
   esac
   command git "$@"
 }
@@ -36,5 +40,9 @@ git() {
 # beads shim: `bd` can re-claim core.hooksPath (init / hook reinstall). Reconcile
 # right after it runs so the next commit is already ours again.
 if command -v bd >/dev/null 2>&1; then
-  bd() { command bd "$@"; local rc=$?; _dotcalum_reconcile_cwd; return $rc; }
+  bd() {
+    command bd "$@"; local rc=$?
+    typeset -f _dotcalum_reconcile_cwd >/dev/null 2>&1 && _dotcalum_reconcile_cwd
+    return $rc
+  }
 fi
