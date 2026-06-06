@@ -15,9 +15,10 @@
   project="$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")"
   sha="$(git rev-parse --short HEAD 2>/dev/null)"
   subject="$(git log -1 --pretty=%s 2>/dev/null)"
-  body="committed #$sha · $subject"
+  title="[commit] ($project): $subject"
+  body="#$sha"
 
-  command -v cmux >/dev/null 2>&1 && cmux notify --title "$project" --body "$body" </dev/null >/dev/null 2>&1 || true
+  command -v cmux >/dev/null 2>&1 && cmux notify --title "$title" --body "$body" </dev/null >/dev/null 2>&1 || true
 
   # Custom logo (true-black tile + green check), shipped in dotcalum/git/assets and
   # resolved relative to this handler so it works on any machine. Only used if present.
@@ -31,11 +32,11 @@
     # stays on screen is macOS-controlled by the notification *style* for the
     # terminal-notifier sender (Banner = auto-dismiss ~5s; Alert = until dismissed) —
     # set it once in System Settings > Notifications > terminal-notifier > Alerts.
-    terminal-notifier -title "$project" -message "$body" "${icon_args[@]}" \
+    terminal-notifier -title "$title" -message "$body" "${icon_args[@]}" \
       -group "dotcalum-commit-$project" -sound Glass -ignoreDnD </dev/null >/dev/null 2>&1 || true
   elif command -v osascript >/dev/null 2>&1; then
-    safe="${body//\"/}"   # strip quotes so the AppleScript string can't break
-    osascript -e "display notification \"$safe\" with title \"$project\" sound name \"Glass\"" >/dev/null 2>&1 || true
+    safe_title="${title//\"/}"; safe_body="${body//\"/}"   # strip quotes so AppleScript can't break
+    osascript -e "display notification \"$safe_body\" with title \"$safe_title\" sound name \"Glass\"" >/dev/null 2>&1 || true
   fi
 ) &
 exit 0
