@@ -14,6 +14,16 @@ need gh; need jq; need terminal-notifier
 PATH_DIRS="$(for b in gh jq terminal-notifier; do dirname "$(command -v "$b")"; done | sort -u | tr '\n' ':')"
 RUN_PATH="${PATH_DIRS}/usr/bin:/bin:/usr/sbin:/sbin"
 
+# Register the stub CI.app so notifications post under their OWN identity ("CI"),
+# giving them a separate Notification Center stack from terminal-notifier commits.
+APP_SRC="$SCRIPT_DIR/CI.app"
+APP_DST="$HOME/Applications/CI.app"
+chmod +x "$APP_SRC/Contents/MacOS/ci"
+mkdir -p "$HOME/Applications"
+rm -rf "$APP_DST"; cp -R "$APP_SRC" "$APP_DST"
+LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+[ -x "$LSREG" ] && "$LSREG" -f "$APP_DST" && echo "  registered CI.app (sender com.calum.ci-notify)"
+
 LA_DIR="$HOME/Library/LaunchAgents"
 PLIST="$LA_DIR/com.calum.ci-notify.plist"
 mkdir -p "$LA_DIR" "$HOME/.local/state/ci-notify"

@@ -22,6 +22,8 @@ BRANCH="${CI_NOTIFY_BRANCH:-main}"
 STATE_DIR="${CI_NOTIFY_STATE:-$HOME/.local/state/ci-notify}"
 SEEN="$STATE_DIR/seen"          # last run id we already notified about
 GROUP="ci-notify:$REPO"         # terminal-notifier group => new note replaces old
+SENDER="${CI_NOTIFY_SENDER:-com.calum.ci-notify}"  # the CI.app stub identity => own
+                                # Notification Center stack, NOT grouped with commits
 mkdir -p "$STATE_DIR"
 
 log() { printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$*"; }
@@ -76,7 +78,7 @@ repo_short="${REPO##*/}"
 TN="$(command -v terminal-notifier || true)"
 if [ -n "$TN" ]; then
   "$TN" -title "$emoji $repo_short" -subtitle "$headline" -message "$title" \
-        -open "$url" -group "$GROUP" >/dev/null 2>&1 || log "terminal-notifier failed"
+        -open "$url" -group "$GROUP" -sender "$SENDER" >/dev/null 2>&1 || log "terminal-notifier failed"
 else
   log "terminal-notifier not on PATH"
 fi
