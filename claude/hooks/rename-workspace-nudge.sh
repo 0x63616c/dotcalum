@@ -17,9 +17,15 @@ ws_id="${CMUX_WORKSPACE_ID:-}"
 # means we set this title. A null color means the title is cmux/Claude's
 # auto-generated first guess that we have never owned. Put color first so the
 # title (which may contain spaces/tabs) is the unambiguous trailing field.
+# Best-effort lookup: cmux IPC can fail transiently (broken socket) and `head`
+# can SIGPIPE the upstream. With `set -e -o pipefail` any such non-zero would
+# abort the whole hook with exit 1 BEFORE the graceful guards below, which
+# Claude surfaces as "UserPromptSubmit hook failed with status code 1". The
+# `|| true` keeps failures silent: an empty $line falls through to the
+# [ -z "$title" ] exit 0 below, exactly as the "stay silent" contract intends.
 line="$(CMUX_QUIET=1 "$CMUX_BIN" workspace list --json --id-format both 2>/dev/null \
   | jq -r --arg id "$ws_id" '.workspaces[] | select(.id==$id) | "\(.custom_color // "")\t\(.title)"' 2>/dev/null \
-  | head -1)"
+  | head -1)" || true
 color="${line%%$'\t'*}"
 title="${line#*$'\t'}"
 
