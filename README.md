@@ -51,6 +51,7 @@ always backed up to GitHub without you remembering to push.
 | `skills/saving-a-memory/` | Skill for where/how to save memories (global `~/.claude/CLAUDE.md` by default; never project-local from a worktree). |
 | `skills/using-1password/` | Skill for using the `op` CLI — Homelab vault, the read-cache shim staleness trap, and the save-script pattern for new secrets. |
 | `skills/writing-goals/` | Skill for composing `/goal` conditions that are tight, transcript-verifiable, and dodge-proof. |
+| `statusline-command.sh` | Tokyo Night statusline for Claude Code: left clock `[5:30pm]`, model + effort `(medium)`, cwd (OSC-8 link to the GitHub remote), git branch + dirty flag, `origin/main` short SHA with `(-N, age)` when local `main` is ahead/unpushed (N commits + age of origin/main's tip), and context-window %. Wire via `statusLine.command` in `settings.json`. |
 
 > The workspace skills need [cmux](https://github.com/manaflow-ai/cmux) on the machine.
 
@@ -74,4 +75,7 @@ ln -s "$PWD/claude/skills/organize-window"                 ~/.claude/skills/orga
 ln -s "$PWD/claude/skills/saving-a-memory"                 ~/.claude/skills/saving-a-memory
 ln -s "$PWD/claude/skills/using-1password"                 ~/.claude/skills/using-1password
 ln -s "$PWD/claude/skills/writing-goals"                   ~/.claude/skills/writing-goals
+
+# Statusline (then set statusLine.command to this path in ~/.claude/settings.json)
+ln -s "$PWD/claude/statusline-command.sh"                  ~/.claude/statusline-command.sh
 ```
