@@ -1,0 +1,86 @@
+# Fastfile for publish-setup. Authenticates with the App Store Connect API key
+# (read from env by the calling script), mints signing assets, and ships builds.
+# Env in: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (base64 of the .p8 contents).
+# NOTE: lanes marked [VERIFY] use flags that depend on the concrete app layout;
+# confirm them on the first real run (testing intentionally deferred at authoring).
+
+def asc_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_content: ENV.fetch("ASC_KEY_P8"),
+    is_key_content_base64: true,
+    in_house: false
+  )
+end
+
+# Generate a .p12 + passphrase from the distribution cert into CERT_OUTPUT_PATH,
+# and (iOS) a provisioning profile, so setup-app.sh can push them to 1Password.
+def export_p12(out_dir)
+  pass = SecureRandom.hex(16)
+  File.write(File.join(out_dir, "p12.pass"), pass)
+  # get_certificates downloads the cert + private key into out_dir.
+  cer = Dir.glob(File.join(out_dir, "*.cer")).first
+  key = Dir.glob(File.join(out_dir, "*.p12")).first || Dir.glob(File.join(out_dir, "*.key")).first
+  p12 = File.join(out_dir, "dist.p12")
+  if key && key.end_with?(".p12")
+    FileUtils.cp(key, p12) # fastlane already produced a .p12
+  else
+    # [VERIFY] bundle cert + key into a .p12 (PEM -> PKCS12).
+    sh("openssl x509 -inform DER -in #{cer} -out #{out_dir}/cert.pem") if cer
+    sh("openssl pkcs12 -export -inkey #{key} -in #{out_dir}/cert.pem -out #{p12} -passout pass:#{pass}") if cer && key
+  end
+  pass
+end
+
+platform :ios do
+  lane :setup_ios do |o|
+    out = ENV.fetch("CERT_OUTPUT_PATH", Dir.pwd)
+    produce(app_identifier: o[:bundle_id], app_name: o[:app_name], api_key: asc_key, skip_itc: false)
+    get_certificates(api_key: asc_key, output_path: out, generate_apple_certs: true) # distribution
+    get_provisioning_profile(api_key: asc_key, app_identifier: o[:bundle_id],
+                             output_path: out, force: true) # App Store profile
+    export_p12(out)
+  end
+
+  # [VERIFY] For Capacitor apps the web assets must be built + synced before gym.
+  lane :release do
+    keychain = "build.keychain-db"
+    create_keychain(name: keychain, password: "ci", unlock: true, timeout: 3600, default_keychain: true)
+    import_certificate(certificate_path: ENV.fetch("CERT_P12_PATH"),
+                       certificate_password: ENV.fetch("SIGNING_P12_PASSWORD"),
+                       keychain_name: keychain, keychain_password: "ci")
+    # Capacitor prep (no-op for native iOS): build web + sync into the iOS project.
+    sh("cd .. && (command -v bun && bun install && bun run build && bunx cap sync ios) || true")
+    gym(scheme: ENV.fetch("IOS_SCHEME", "App"),
+        export_method: "app-store",
+        project: ENV["IOS_PROJECT"], workspace: ENV["IOS_WORKSPACE"])
+    pilot(api_key: asc_key, skip_waiting_for_build_processing: true) # upload to TestFlight
+  end
+end
+
+platform :mac do
+  lane :setup_macos do |o|
+    out = ENV.fetch("CERT_OUTPUT_PATH", Dir.pwd)
+    produce(app_identifier: o[:bundle_id], app_name: o[:app_name], api_key: asc_key,
+            platform: "osx", skip_itc: true) # Developer ID dist is off-store
+    get_certificates(api_key: asc_key, output_path: out, generate_apple_certs: true,
+                     platform: "macos", type: "developer_id_application") # [VERIFY] type flag
+    export_p12(out)
+  end
+
+  # [VERIFY] Build command is app-specific (SwiftPM vs xcodebuild). copy-cat uses
+  # `swift build`; an Xcode target would use gym. Notarize + staple + DMG below.
+  lane :release_macos do
+    keychain = "build.keychain-db"
+    create_keychain(name: keychain, password: "ci", unlock: true, timeout: 3600, default_keychain: true)
+    import_certificate(certificate_path: ENV.fetch("CERT_P12_PATH"),
+                       certificate_password: ENV.fetch("SIGNING_P12_PASSWORD"),
+                       keychain_name: keychain, keychain_password: "ci")
+    app = ENV.fetch("MAC_APP_PATH") # path to the built .app
+    ident = sh("security find-identity -v -p codesigning #{keychain} | grep 'Developer ID Application' | head -1 | awk '{print $2}'").strip
+    sh("codesign --force --options runtime --timestamp --sign #{ident} '#{app}'")
+    notarize(package: app, api_key: asc_key) # wraps notarytool submit --wait + staple
+    sh("npx create-dmg '#{app}' dist/ || true") # [VERIFY] dmg tooling
+  end
+end
