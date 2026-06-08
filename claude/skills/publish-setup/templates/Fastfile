@@ -1,3 +1,6 @@
+require "securerandom"
+require "fileutils"
+
 # Fastfile for publish-setup. Authenticates with the App Store Connect API key
 # (read from env by the calling script), mints signing assets, and ships builds.
 # Env in: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (base64 of the .p8 contents).
