@@ -77,7 +77,7 @@ esac
 repo_short="${REPO##*/}"
 TN="$(command -v terminal-notifier || true)"
 if [ -n "$TN" ]; then
-  "$TN" -title "$emoji $repo_short" -subtitle "$headline" -message "$title" \
+  "$TN" -title "[CI] $emoji $repo_short" -subtitle "$headline" -message "$title" \
         -open "$url" -group "$GROUP" -sender "$SENDER" >/dev/null 2>&1 || log "terminal-notifier failed"
 else
   log "terminal-notifier not on PATH"
