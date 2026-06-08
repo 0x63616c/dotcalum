@@ -61,11 +61,15 @@ deployed="$(printf '%s' "$jobs_json" | jq -r '
 broke="$(printf '%s' "$jobs_json" | jq -r '
   [ .jobs[] | select(.conclusion=="failure" or .conclusion=="timed_out")
     | .name ] | join(", ")' 2>/dev/null)"
+# did the deploy job go green? (bosun webhook accepted => deploy ✅)
+deploy_ok="$(printf '%s' "$jobs_json" | jq -r '
+  any(.jobs[]; .name=="deploy" and .conclusion=="success")' 2>/dev/null)"
 
 case "$concl" in
   success)
     emoji="✅"
     if [ -n "$deployed" ]; then headline="shipped — $deployed"; else headline="CI passed (no image changes)"; fi
+    [ "$deploy_ok" = "true" ] && headline="$headline ✅ deploy"
     ;;
   failure|timed_out|startup_failure)
     emoji="❌"
