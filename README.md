@@ -19,12 +19,26 @@ See it live with `tail -f ~/.local/state/hooks/timing.jsonl | jq .`.
 | `git/reconcile-hooks.sh` | **Capture-and-delegate**, so the dispatcher fronts EVERY repo even when beads/lefthook/husky claim a repo-local `core.hooksPath`. Saves the tool's path into `hooks.delegate`, unsets the local override (our dispatcher then delegates back to the tool — nothing breaks). Idempotent + reversible: `--all` (sweep), `--restore [repo]`, `--status`. Opt a repo out with `git config hooks.optout true`. |
 | `shell/git-hooks-shell.zsh` | Self-heal triggers sourced from `~/.aliases`: zsh `chpwd` + a `git` wrapper (reconciles before commit/push/merge) + a `bd` shim. Current-repo-only, fail-open. |
 | `git/launchd/…plist.template` | Background launchd sweep (`com.calum.git-hooks-reconcile`, every 600s) that re-captures any stray override across all repos. `install.sh` fills in paths and loads it. |
-| `git/install.sh` | Points global `core.hooksPath` at `git/hooks`, (re)creates the hook symlinks, wires the shell self-heal into `~/.aliases`, installs+loads the launchd sweep, and runs an initial capture sweep. Idempotent. |
+| `git/install.sh` | Points global `core.hooksPath` at `git/hooks`, (re)creates the hook symlinks, wires the shell self-heal into `~/.aliases`, installs+loads the launchd sweep, runs an initial capture sweep, and bootstraps the auto-push LaunchAgent (see below). Idempotent. |
 | `shell/claude-wrapper.zsh` | Launch wrapper sourced from `~/.aliases`. Makes `claude` and `c` identical — both always run with `--dangerously-skip-permissions`; `cc` is the escape hatch (no skip). Every launch first runs the pre-session lifecycle hook. `command claude` bypasses the functions to the real binary, so no recursion and cmux integration is preserved. |
 | `claude/hooks/dispatch.sh` | Transparent Claude-hook timing wrapper: `dispatch.sh <Event> <label> <cmd...>` runs the real hook with stdin/stdout/exit inherited (Claude's hook protocol untouched), times it, logs one line. |
 | `claude/hooks/wire-timing.sh` | Idempotent jq transform that routes Calum's **personal** `settings.json` hooks through `dispatch.sh`. Leaves externally-managed hooks (NotchBar, tagged `# notchbar-`) alone. Backs up + validates before replacing. |
 | `claude/hooks/pre-session.sh` | Pre-session lifecycle hook. Runs once before every `claude`/`c`/`cc` launch (before the actual session starts), receives the launch args, best-effort (exit code doesn't block). Edit it to run anything you want before any session. |
 | `skills/install-claude-hooks/` | Skill + `install.sh` to symlink the wrapper sourcing, pre-session hook, `dispatch.sh`, and this skill into `~/.claude`, and run `wire-timing.sh`. Idempotent. |
+
+### Auto-push (continuous backup of this repo)
+
+A LaunchAgent that every 5 minutes (and once at each login/reboot) auto-commits any
+local changes in this repo and pushes to its upstream branch — so the dotfiles are
+always backed up to GitHub without you remembering to push.
+
+| Path | What it does |
+|---|---|
+| `auto-push/auto-push.sh` | Staged-commit-and-push the target repo (path passed as `$1`). Commits only when the tree is dirty; the unattended snapshot bypasses ALL git hooks (`core.hooksPath=/dev/null`) so it never fires the webcam selfie / timing dispatcher / commit-msg guards meant for human commits. Fail-soft: a transient push/auth failure logs and the next tick retries (not `set -e`). |
+| `auto-push/launchd/…plist.template` | `com.calum.dotcalum-autopush` LaunchAgent: `StartInterval` 300s + `RunAtLoad`. `install.sh` fills `__SCRIPT__/__REPO__/__HOME__/__PATH__/__SSH_ENV__` (machine-specific). |
+| `auto-push/install.sh` | Bakes this repo's path into the plist, resolves `git` onto launchd's PATH, injects the GUI `SSH_AUTH_SOCK` if present (ssh remote), and bootstraps the agent. Idempotent. Auto-run at the end of `git/install.sh`. Logs: `~/.local/state/autopush/{log,err}`. |
+
+> Uninstall: `launchctl bootout gui/$(id -u)/com.calum.dotcalum-autopush && rm ~/Library/LaunchAgents/com.calum.dotcalum-autopush.plist`.
 
 ### `claude/`
 

@@ -65,3 +65,11 @@ echo
 echo "Done. Repos with their own core.hooksPath (beads/lefthook/husky) are now captured:"
 echo "their hooks run via our dispatcher's delegation (hooks.delegate). Opt a repo out"
 echo "with 'git config hooks.optout true'; undo a capture with 'reconcile-hooks.sh --restore'."
+
+# --- bootstrap the auto-push LaunchAgent (commits + pushes this repo every 5 min) ---
+AUTOPUSH_INSTALL="$(cd "$SCRIPT_DIR/.." && pwd)/auto-push/install.sh"
+if [ -x "$AUTOPUSH_INSTALL" ]; then
+  echo
+  echo "Auto-push LaunchAgent:"
+  bash "$AUTOPUSH_INSTALL" | sed 's/^/  /'
+fi
