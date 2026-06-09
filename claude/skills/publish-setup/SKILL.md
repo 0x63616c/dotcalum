@@ -1,6 +1,6 @@
 ---
 name: publish-setup
-description: Use when Calum wants to set up Apple app distribution for a repo, ship an app to TestFlight, or build/notarize a macOS app for release. One up-front interview surfaces only the human-only Apple steps (Developer Program enrollment, the one App Store Connect API key), stores signing assets in 1Password (Homelab), syncs them to GitHub secrets, and drops in self-installing CI that ships iOS to TestFlight or a notarized macOS DMG on a version tag. Triggers: "get this on TestFlight", "set up signing", "publish this app", "ship to the App Store", "notarize this Mac app".
+description: Use when Calum wants to set up Apple app distribution for a repo or ship an iOS app to TestFlight. One up-front interview surfaces only the human-only Apple steps (Developer Program enrollment, the one App Store Connect API key, the match git auth), reuses the account's single shared distribution cert via fastlane match (git backend, central certificates repo), keeps the match passphrase + ASC key + git auth in 1Password (Homelab), syncs secrets/variables to GitHub, and drops in self-installing CI that ships iOS to TestFlight on a version tag. Triggers: "get this on TestFlight", "set up signing", "publish this app", "ship to the App Store".
 ---
 
 # publish-setup
@@ -86,9 +86,10 @@ he works the manual bits. The full human-only set:
   If none exists, ask public vs private (public = free macOS runner minutes;
   private bills 10x) before `gh repo create`. Confirm before publishing the code.
 
-Everything below this line is yours to automate. The human-gated items (1, 2) only
-*block* the steps that consume them (3, 4) — keep building everything else
-(Capacitor shell, CI files, docs) in parallel while Calum handles them.
+Everything below this line is yours to automate. The human-gated items (ASC key,
+match git auth, enrollment) only *block* the steps that consume them (3, 4) — keep
+building everything else (Capacitor shell, CI files, docs) in parallel while Calum
+handles them.
 
 ### 1. Apple Developer Program (only if not enrolled)
 Test enrollment by attempting an authenticated call (e.g. `setup-app.sh` dry step,
@@ -111,33 +112,38 @@ Then: `bash scripts/save-asc-key.sh` — it prompts for Issuer ID, Key ID, and t
 path to the downloaded `.p8`, and writes all three into 1Password.
 
 ### 3. Provision the app (per repo)
-`bash scripts/setup-app.sh <ios|macos> <bundle_id> <app_name>`
-- Copies `templates/Fastfile` + `templates/Gemfile` into the repo if missing.
-- `fastlane produce` — registers the bundle ID + App Store Connect app record.
-- `fastlane cert` + `fastlane sigh` — mints the distribution cert (`.p12`) and
-  profile, reading the ASC key from 1Password.
-- Stores the minted `.p12` (base64) + passphrase + profile back into 1Password as
-  item `<app>-signing`.
+`bash scripts/setup-app.sh ios <bundle_id> <app_name>`
+- Copies `templates/Fastfile` + `templates/Matchfile` + `templates/Gemfile` into
+  the repo if missing.
+- Reads the ASC key + match secrets from 1Password into env.
+- Runs `fastlane ios setup_ios` → `match(type: appstore, readonly: false)` for the
+  bundle ID: **reuses the shared distribution cert** and mints this app's
+  provisioning profile into the certificates repo. No new cert, no app record
+  juggling (match/ASC create the record as needed).
 Bundle ID convention: `co.worldwidewebb.<app>` (confirm with Calum on first run).
 
-### 4. Sync secrets to GitHub
-`bash scripts/sync-secrets.sh <owner/repo>` — `op read` → `gh secret set` for:
-`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, `SIGNING_P12`, `SIGNING_P12_PASSWORD`,
-and (iOS) `PROVISIONING_PROFILE`. Nothing secret is written to the repo tree.
+### 4. Sync secrets + variables to GitHub
+`bash scripts/sync-secrets.sh <owner/repo> <bundle_id> [team_id] [ios_project] [initial_build_number]`
+- Secrets (`gh secret set`): `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_CONTENT`,
+  `MATCH_PASSWORD`, `MATCH_GIT_URL`, `MATCH_GIT_BASIC_AUTHORIZATION`.
+- Variables (`gh variable set`): `BUNDLE_ID`, `APPLE_TEAM_ID`, `IOS_PROJECT`
+  (default `ios/App/App.xcodeproj`), `IOS_SCHEME` (`App`), `INITIAL_BUILD_NUMBER`.
+- Also set the `VITE_API_BASE` variable here if the Capacitor app needs a hosted
+  backend. Nothing secret is written to the repo tree.
 
 ### 5. Install CI
-Copy the matching workflow into the repo:
-- ios → `templates/release-ios.yml` → `.github/workflows/release-ios.yml`
-- macos → `templates/release-macos.yml` → `.github/workflows/release-macos.yml`
-Also install the secret-leak pre-commit guard: `templates/pre-commit-guard.sh` →
-`.git/hooks/pre-commit` (or append to existing). It blocks commits containing
-`.p8`/`.p12` material or `PRIVATE KEY` blobs.
+Copy `templates/release-ios.yml` → `.github/workflows/release-ios.yml`. It builds
+the web app + `cap sync`, runs `match` readonly, and ships to TestFlight on a
+`v*` tag. Also install the secret-leak pre-commit guard
+(`templates/pre-commit-guard.sh` → `.git/hooks/pre-commit`); it blocks commits
+containing `.p8`/`.p12` material or `PRIVATE KEY` blobs.
 
 ### 6. Commit + flag minutes
-Commit the Fastfile/Gemfile/workflow (no secrets). Remind Calum: a release is
+Commit the Fastfile/Matchfile/Gemfile/workflow (no secrets). A release is
 triggered by pushing a tag `vX.Y.Z`. If the repo is **private**, warn that macOS
 runner minutes bill at 10x; public repos are free.
 
 ## What "done" looks like
-Calum pushes `v0.1.0` → CI builds, signs, and either uploads to TestFlight or
-notarizes + attaches a DMG to a GitHub Release, with zero further manual steps.
+Calum pushes `v0.1.0` → CI builds the web app, syncs Capacitor, pulls the shared
+cert + this app's profile via match, builds, and uploads to TestFlight — zero
+further manual steps.

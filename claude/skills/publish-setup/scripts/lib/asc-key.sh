@@ -77,7 +77,7 @@ MATCH_GIT_URL_DEFAULT="${MATCH_GIT_URL_DEFAULT:-https://github.com/0x63616c/cert
 match_password() { _asc_field "match-password" "match password" "MATCH_PASSWORD"; }
 match_git_auth() { _asc_field "match-git-auth" "match git auth" "match-git-basic-authorization" "MATCH_GIT_BASIC_AUTHORIZATION"; }
 match_git_url() {
-  local item v
+  local item v label
   item="$(asc_resolve)" || return 1
   for label in "match-git-url" "match git url" "MATCH_GIT_URL"; do
     v="$(op read "op://$ASC_VAULT/$item/$label" 2>/dev/null)" || true
