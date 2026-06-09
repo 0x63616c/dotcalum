@@ -76,6 +76,13 @@ MATCH_GIT_URL_DEFAULT="${MATCH_GIT_URL_DEFAULT:-https://github.com/0x63616c/cert
 
 match_password() { _asc_field "match-password" "match password" "MATCH_PASSWORD"; }
 
+# Apple ID + Spaceship session for headless App Store Connect app creation (the
+# one thing the API key can't do). Stored by save-apple-session.sh; the session
+# expires every ~2-4 weeks. Both return non-zero/empty when absent — callers
+# treat that as "no session, warn and skip app creation".
+apple_id()         { _asc_field "apple-id" "apple id" "APPLE_ID" 2>/dev/null; }
+fastlane_session() { _asc_field "fastlane-session" "fastlane session" "FASTLANE_SESSION" 2>/dev/null; }
+
 # MATCH_GIT_BASIC_AUTHORIZATION = base64("user:token") for cloning the certs repo.
 # Prefer an explicitly-stored value; otherwise derive it from the GitHub PAT
 # already in 1Password (item GITHUB_PAT_ITEM, default "GitHub Personal Access

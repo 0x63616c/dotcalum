@@ -61,14 +61,28 @@ platform :ios do
       )
     end
 
-    # 2. App Store Connect app record. Apple's API does NOT permit creating apps
-    #    (the 'apps' resource allows only GET/UPDATE), so this is the ONE step the
-    #    API key can't do — it must be created once in the web UI. Warn, don't fail.
+    # 2. App Store Connect app record. Apple's API can't create apps (the 'apps'
+    #    resource is GET/UPDATE only), so app creation needs an Apple ID web
+    #    session via produce. If FASTLANE_SESSION is present (save-apple-session.sh)
+    #    we create it headlessly; otherwise warn with the manual steps.
     if (Spaceship::ConnectAPI::App.find(bundle_id) rescue nil).nil?
-      UI.important("No App Store Connect app record for #{bundle_id} yet.")
-      UI.important("Create it ONCE: https://appstoreconnect.apple.com → Apps → (+) → New App")
-      UI.important("  name: #{name}   bundle id: #{bundle_id}   platform: iOS")
-      UI.important("Apple's API can't create apps; this is required before the TestFlight upload.")
+      if ENV["FASTLANE_SESSION"].to_s.empty?
+        UI.important("No App Store Connect app record for #{bundle_id}, and no Apple ID session.")
+        UI.important("Either run save-apple-session.sh (then re-run setup-app.sh), or create it once:")
+        UI.important("  https://appstoreconnect.apple.com → Apps → (+) → New App")
+        UI.important("  name: #{name}   bundle id: #{bundle_id}   platform: iOS")
+        UI.important("Required before the TestFlight upload.")
+      else
+        UI.message("Creating App Store Connect app record for #{bundle_id} via Apple ID session")
+        # produce uses the web session (FASTLANE_USER + FASTLANE_SESSION); the
+        # bundle id is already registered above, so skip the dev-portal step.
+        produce(
+          username: ENV.fetch("FASTLANE_USER"),
+          app_identifier: bundle_id,
+          app_name: name,
+          skip_devcenter: true
+        )
+      end
     end
 
     # 3. Mint this app's provisioning profile, reusing the shared distribution cert.
