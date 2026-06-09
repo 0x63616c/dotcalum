@@ -60,6 +60,10 @@ he works the manual bits. The full human-only set:
   relative `/api` path; it needs an absolute backend. Ask for the hosted URL, or
   confirm "not hosted yet" and wire it as a build-time `VITE_API_BASE` (Actions
   variable) with a documented placeholder.
+- **GitHub repo** — `git remote -v` + `gh repo view <owner/repo>`. Steps 4
+  (sync-secrets) and 5 (CI runs) REQUIRE a GitHub repo; a local-only repo can't.
+  If none exists, ask public vs private (public = free macOS runner minutes;
+  private bills 10x) before `gh repo create`. Confirm before publishing the code.
 
 Everything below this line is yours to automate. The human-gated items (1, 2) only
 *block* the steps that consume them (3, 4) — keep building everything else
