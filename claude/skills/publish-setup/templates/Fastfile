@@ -119,11 +119,16 @@ platform :ios do
     group = app.get_beta_groups.find { |g| g.name == group_name }
     if group.nil?
       UI.message("Creating internal TestFlight group '#{group_name}' (auto-receives all builds)")
-      group = app.create_beta_group(
-        group_name: group_name,
-        is_internal_group: true,
-        has_access_to_all_builds: true
-      )
+      # NOTE: app.create_beta_group sends publicLinkLimitEnabled, which Apple
+      # rejects for internal groups (fastlane#29556). POST the betaGroup directly.
+      Spaceship::ConnectAPI.test_flight_request_client.post("v1/betaGroups", {
+        data: {
+          type: "betaGroups",
+          attributes: { name: group_name, isInternalGroup: true, hasAccessToAllBuilds: true },
+          relationships: { app: { data: { type: "apps", id: app.id } } }
+        }
+      })
+      group = app.get_beta_groups.find { |g| g.name == group_name }
     end
 
     email = (ENV["TESTFLIGHT_TESTER"] || ENV["FASTLANE_USER"]).to_s
@@ -133,10 +138,16 @@ platform :ios do
       UI.message("#{email} is already a tester.")
     else
       UI.message("Adding internal tester #{email} to '#{group_name}'")
-      group.post_bulk_beta_tester_assignments(beta_testers: [
-        { email: email, firstName: ENV.fetch("TESTFLIGHT_TESTER_FIRST", "Internal"),
-          lastName: ENV.fetch("TESTFLIGHT_TESTER_LAST", "Tester") }
-      ])
+      # post_bulk_beta_tester_assignments hits a dead endpoint (404); the single
+      # betaTesters create with a betaGroups relationship is the working path.
+      Spaceship::ConnectAPI.post_beta_tester_assignment(
+        beta_group_ids: [group.id],
+        attributes: {
+          email: email,
+          firstName: ENV.fetch("TESTFLIGHT_TESTER_FIRST", "Internal"),
+          lastName: ENV.fetch("TESTFLIGHT_TESTER_LAST", "Tester")
+        }
+      )
     end
     UI.success("Internal TestFlight ready: group '#{group_name}'#{email.empty? ? '' : ", tester #{email}"}.")
   end
