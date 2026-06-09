@@ -75,6 +75,12 @@ he works the manual bits. The full human-only set:
   with `match_password`).
 - **Apple Team ID** — needed for `update_code_signing_settings` (e.g.
   `X9E4HG27NK`). Confirm once; passed to `sync-secrets.sh` as a GitHub variable.
+- **App Store Connect app record** — the ONE thing Apple's API genuinely cannot
+  do: the `apps` resource is GET/UPDATE only, no CREATE. `setup_ios` registers the
+  bundle id + mints the profile over the API, but the app record itself must be
+  created once by hand at appstoreconnect.apple.com → Apps → (+) → New App (name +
+  bundle id + iOS). Required before the first TestFlight upload — front-load it so
+  Calum does it while CI builds.
 - **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.
 - **Capacitor (web-app repos only)** — if there's no native shell, confirm adding
   one (step 0 detection). Don't silently scaffold.
@@ -117,10 +123,12 @@ path to the downloaded `.p8`, and writes all three into 1Password.
 - Copies `templates/Fastfile` + `templates/Matchfile` + `templates/Gemfile` into
   the repo if missing.
 - Reads the ASC key + match secrets from 1Password into env.
-- Runs `fastlane ios setup_ios` → `match(type: appstore, readonly: false)` for the
-  bundle ID: **reuses the shared distribution cert** and mints this app's
-  provisioning profile into the certificates repo. No new cert, no app record
-  juggling (match/ASC create the record as needed).
+- Runs `fastlane ios setup_ios`: registers the bundle ID via the ASC API
+  (Spaceship ConnectAPI — `produce` insists on an Apple ID even with the API key,
+  so it's bypassed), then `match(type: appstore, readonly: false)` **reuses the
+  shared distribution cert** and mints this app's profile into the certificates
+  repo. No new cert. It WARNS (not fails) if the App Store Connect app record is
+  missing — that record must be created by hand once (Apple API can't, see 0.5).
 Bundle ID convention: `co.worldwidewebb.<app>` (confirm with Calum on first run).
 
 ### 4. Sync secrets + variables to GitHub

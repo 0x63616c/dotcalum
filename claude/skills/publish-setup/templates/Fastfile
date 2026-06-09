@@ -61,18 +61,14 @@ platform :ios do
       )
     end
 
-    # 2. Create the App Store Connect app record via the API (produce demands an
-    #    Apple ID even with skip_devcenter, so go straight through ConnectAPI).
+    # 2. App Store Connect app record. Apple's API does NOT permit creating apps
+    #    (the 'apps' resource allows only GET/UPDATE), so this is the ONE step the
+    #    API key can't do — it must be created once in the web UI. Warn, don't fail.
     if (Spaceship::ConnectAPI::App.find(bundle_id) rescue nil).nil?
-      UI.message("Creating App Store Connect app record for #{bundle_id}")
-      Spaceship::ConnectAPI::App.create(
-        name: name,
-        version_string: "1.0",
-        sku: bundle_id,
-        primary_locale: "en-US",
-        bundle_id: bundle_id,
-        platforms: ["IOS"]
-      )
+      UI.important("No App Store Connect app record for #{bundle_id} yet.")
+      UI.important("Create it ONCE: https://appstoreconnect.apple.com → Apps → (+) → New App")
+      UI.important("  name: #{name}   bundle id: #{bundle_id}   platform: iOS")
+      UI.important("Apple's API can't create apps; this is required before the TestFlight upload.")
     end
 
     # 3. Mint this app's provisioning profile, reusing the shared distribution cert.
