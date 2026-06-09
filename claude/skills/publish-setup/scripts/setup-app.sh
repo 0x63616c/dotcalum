@@ -46,8 +46,8 @@ mkdir -p fastlane
 command -v bundle >/dev/null || { echo "FATAL: bundler not found (gem install bundler)" >&2; exit 1; }
 bundle install --quiet
 
-# --- Mint the provisioning profile (reuses the shared cert) -----------------
-export BUNDLE_ID
+# --- Register the app + mint its profile (reuses the shared cert) -----------
+export BUNDLE_ID APP_NAME
 echo "==> fastlane ios setup_ios ($BUNDLE_ID)"
 bundle exec fastlane ios setup_ios
 
