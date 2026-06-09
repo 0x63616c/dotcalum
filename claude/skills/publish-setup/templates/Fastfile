@@ -1,89 +1,81 @@
-require "securerandom"
-require "fileutils"
+default_platform(:ios)
 
-# Fastfile for publish-setup. Authenticates with the App Store Connect API key
-# (read from env by the calling script), mints signing assets, and ships builds.
-# Env in: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (base64 of the .p8 contents).
-# NOTE: lanes marked [VERIFY] use flags that depend on the concrete app layout;
-# confirm them on the first real run (testing intentionally deferred at authoring).
+# Fastfile for publish-setup (fastlane match flow).
+#
+# Signing is shared across every app in the account via fastlane match against a
+# central git repo (MATCH_GIT_URL, e.g. github.com/0x63616c/certificates). ONE
+# distribution certificate signs all apps; each app gets its own provisioning
+# profile minted into that same repo. The match passphrase + ASC API key live in
+# 1Password; CI reads everything from GitHub secrets (synced by sync-secrets.sh).
+#
+# Env in (all paths): MATCH_PASSWORD, MATCH_GIT_URL, MATCH_GIT_BASIC_AUTHORIZATION,
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_CONTENT (base64 .p8).
+# App-specific (set by CI / setup-app.sh): BUNDLE_ID, APPLE_TEAM_ID, IOS_PROJECT
+#   (default App/App.xcodeproj), IOS_SCHEME (default App), INITIAL_BUILD_NUMBER.
 
 def asc_key
   app_store_connect_api_key(
     key_id: ENV.fetch("ASC_KEY_ID"),
     issuer_id: ENV.fetch("ASC_ISSUER_ID"),
-    key_content: ENV.fetch("ASC_KEY_P8"),
-    is_key_content_base64: true,
-    in_house: false
+    key_content: ENV.fetch("ASC_KEY_CONTENT"),
+    is_key_content_base64: true
   )
 end
 
-# Generate a .p12 + passphrase from the distribution cert into CERT_OUTPUT_PATH,
-# and (iOS) a provisioning profile, so setup-app.sh can push them to 1Password.
-def export_p12(out_dir)
-  pass = SecureRandom.hex(16)
-  File.write(File.join(out_dir, "p12.pass"), pass)
-  # get_certificates downloads the cert + private key into out_dir.
-  cer = Dir.glob(File.join(out_dir, "*.cer")).first
-  key = Dir.glob(File.join(out_dir, "*.p12")).first || Dir.glob(File.join(out_dir, "*.key")).first
-  p12 = File.join(out_dir, "dist.p12")
-  if key && key.end_with?(".p12")
-    FileUtils.cp(key, p12) # fastlane already produced a .p12
-  else
-    # [VERIFY] bundle cert + key into a .p12 (PEM -> PKCS12).
-    sh("openssl x509 -inform DER -in #{cer} -out #{out_dir}/cert.pem") if cer
-    sh("openssl pkcs12 -export -inkey #{key} -in #{out_dir}/cert.pem -out #{p12} -passout pass:#{pass}") if cer && key
-  end
-  pass
+def bundle_id
+  ENV.fetch("BUNDLE_ID")
+end
+
+def ios_project
+  ENV.fetch("IOS_PROJECT", "App/App.xcodeproj")
 end
 
 platform :ios do
-  lane :setup_ios do |o|
-    out = ENV.fetch("CERT_OUTPUT_PATH", Dir.pwd)
-    produce(app_identifier: o[:bundle_id], app_name: o[:app_name], api_key: asc_key, skip_itc: false)
-    get_certificates(api_key: asc_key, output_path: out, generate_apple_certs: true) # distribution
-    get_provisioning_profile(api_key: asc_key, app_identifier: o[:bundle_id],
-                             output_path: out, force: true) # App Store profile
-    export_p12(out)
+  # Run ONCE per new app, locally, to mint a provisioning profile for its bundle
+  # id into the certificates repo (reusing the shared distribution cert). Pass
+  # readonly:false so match creates the profile if absent. setup-app.sh calls this.
+  desc "Provision a new app's profile against the shared match repo"
+  lane :setup_ios do
+    match(type: "appstore", api_key: asc_key, app_identifier: bundle_id, readonly: false)
   end
 
-  # [VERIFY] For Capacitor apps the web assets must be built + synced before gym.
+  desc "Build and upload to TestFlight"
   lane :release do
-    keychain = "build.keychain-db"
-    create_keychain(name: keychain, password: "ci", unlock: true, timeout: 3600, default_keychain: true)
-    import_certificate(certificate_path: ENV.fetch("CERT_P12_PATH"),
-                       certificate_password: ENV.fetch("SIGNING_P12_PASSWORD"),
-                       keychain_name: keychain, keychain_password: "ci")
-    # Capacitor prep (no-op for native iOS): build web + sync into the iOS project.
-    sh("cd .. && (command -v bun && bun install && bun run build && bunx cap sync ios) || true")
-    gym(scheme: ENV.fetch("IOS_SCHEME", "App"),
-        export_method: "app-store",
-        project: ENV["IOS_PROJECT"], workspace: ENV["IOS_WORKSPACE"])
-    pilot(api_key: asc_key, skip_waiting_for_build_processing: true) # upload to TestFlight
-  end
-end
+    setup_ci # ephemeral CI keychain; no-op locally
 
-platform :mac do
-  lane :setup_macos do |o|
-    out = ENV.fetch("CERT_OUTPUT_PATH", Dir.pwd)
-    produce(app_identifier: o[:bundle_id], app_name: o[:app_name], api_key: asc_key,
-            platform: "osx", skip_itc: true) # Developer ID dist is off-store
-    get_certificates(api_key: asc_key, output_path: out, generate_apple_certs: true,
-                     platform: "macos", type: "developer_id_application") # [VERIFY] type flag
-    export_p12(out)
-  end
+    match(type: "appstore", api_key: asc_key, app_identifier: bundle_id, readonly: true)
 
-  # [VERIFY] Build command is app-specific (SwiftPM vs xcodebuild). copy-cat uses
-  # `swift build`; an Xcode target would use gym. Notarize + staple + DMG below.
-  lane :release_macos do
-    keychain = "build.keychain-db"
-    create_keychain(name: keychain, password: "ci", unlock: true, timeout: 3600, default_keychain: true)
-    import_certificate(certificate_path: ENV.fetch("CERT_P12_PATH"),
-                       certificate_password: ENV.fetch("SIGNING_P12_PASSWORD"),
-                       keychain_name: keychain, keychain_password: "ci")
-    app = ENV.fetch("MAC_APP_PATH") # path to the built .app
-    ident = sh("security find-identity -v -p codesigning #{keychain} | grep 'Developer ID Application' | head -1 | awk '{print $2}'").strip
-    sh("codesign --force --options runtime --timestamp --sign #{ident} '#{app}'")
-    notarize(package: app, api_key: asc_key) # wraps notarytool submit --wait + staple
-    sh("npx create-dmg '#{app}' dist/ || true") # [VERIFY] dmg tooling
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: ios_project,
+      team_id: ENV["APPLE_TEAM_ID"],
+      bundle_identifier: bundle_id,
+      profile_name: ENV["sigh_#{bundle_id}_appstore_profile-name"],
+      code_sign_identity: "Apple Distribution"
+    )
+
+    # Build number from TestFlight (monotonic across repos), not the CI run number.
+    latest = latest_testflight_build_number(
+      api_key: asc_key,
+      app_identifier: bundle_id,
+      initial_build_number: ENV.fetch("INITIAL_BUILD_NUMBER", "0").to_i
+    )
+    increment_build_number(build_number: latest + 1, xcodeproj: ios_project)
+
+    build_app(
+      project: ios_project,
+      scheme: ENV.fetch("IOS_SCHEME", "App"),
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./build",
+      clean: true,
+      codesigning_identity: "Apple Distribution"
+    )
+
+    upload_to_testflight(
+      api_key: asc_key,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true
+    )
   end
 end
