@@ -11,6 +11,18 @@ REF_ISSUER="op://$VAULT/$ITEM/issuer-id"
 REF_KEYID="op://$VAULT/$ITEM/key-id"
 REF_P8="op://$VAULT/$ITEM/p8"
 
+# An ASC API key is account-level, not per-app. If one already lives in 1Password
+# (this skill's `asc-api-key` item, or a pre-existing key another repo's CI uses),
+# reuse it — don't make the human download a second one. --force overrides.
+export ASC_VAULT="$VAULT"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/asc-key.sh"
+if [ "${1:-}" != "--force" ] && EXISTING="$(asc_resolve 2>/dev/null)" && [ -n "$EXISTING" ]; then
+  echo "An App Store Connect API key already exists: op://$VAULT/$EXISTING"
+  echo "It is account-level and reusable across apps, so no new key is needed."
+  echo "Run with --force only if you want to store a different key."
+  exit 0
+fi
+
 echo "App Store Connect API key setup."
 echo "Get these at: App Store Connect -> Users and Access -> Integrations ->"
 echo "App Store Connect API -> generate a key (role: Admin)."

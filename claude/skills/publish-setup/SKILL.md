@@ -36,8 +36,12 @@ Design spec: `dotcalum/docs/superpowers/specs/2026-06-08-publish-setup-skill-des
 ### 0. Detect state
 Run, in the target repo:
 - `command -v fastlane gh op` — tooling present?
-- `op item get asc-api-key --vault Homelab >/dev/null 2>&1` — is the ASC key already
-  stored? If yes, skip steps 1-2 entirely.
+- ASC key already in 1Password? Don't just check the `asc-api-key` item — an ASC
+  key is **account-level and reusable across apps**, and one may already exist
+  under a different title (e.g. `App Store Connect API`) with the `.p8` stored as
+  a file attachment. Source `scripts/lib/asc-key.sh` and run `asc_resolve`; if it
+  finds one, **skip steps 1-2 entirely** and reuse it. (`save-asc-key.sh` does
+  this check itself and exits early.)
 - Inspect repo to classify the app:
   - `Package.swift` or an Xcode macOS target → **macos** (notarize path).
   - `capacitor.config.*` / `ios/App/App.xcodeproj` → **ios** (TestFlight path).
@@ -49,10 +53,12 @@ Immediately after detection, ask Calum everything only a human can supply — in
 single round of questions, not drip-fed across steps. Then start automating while
 he works the manual bits. The full human-only set:
 - **Apple Developer Program** — enrolled? (gates everything; see step 1.)
-- **App Store Connect API key** — only if `asc-api-key` not already in 1Password.
-  Hand him the ASC path + `save-asc-key.sh` command NOW so he can download the
-  `.p8` and run the script while you build (see step 2). This is the most common
-  thing agents forget to front-load.
+- **App Store Connect API key** — only if `asc_resolve` finds NO existing key
+  (see step 0). A key is account-level, so a prior app's key is reused
+  automatically and this becomes a no-op. If none exists, hand him the ASC path +
+  `save-asc-key.sh` command NOW so he can download the `.p8` and run the script
+  while you build (see step 2). This is the most common thing agents forget to
+  front-load.
 - **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.
 - **Capacitor (web-app repos only)** — if there's no native shell, confirm adding
   one (step 0 detection). Don't silently scaffold.
@@ -77,8 +83,11 @@ Calum:
 > Developer iOS app + ~24-48h for approval. Re-run me once approved.
 Then **stop** — nothing downstream works without it.
 
-### 2. App Store Connect API key (only if `asc-api-key` not in 1Password)
-Tell Calum the exact path, then hand off to the script:
+### 2. App Store Connect API key (only if `asc_resolve` finds none)
+The key is account-level and reusable; `asc-key.sh` auto-discovers a pre-existing
+one (any vault item with a `.p8`, including the `.p8` stored as a file attachment)
+and `save-asc-key.sh` exits early if it finds one. Only when there is genuinely no
+key anywhere: tell Calum the exact path, then hand off to the script:
 > App Store Connect → Users and Access → Integrations → App Store Connect API →
 > click `+` → name it "CI", role **Admin** → Generate → **Download the `.p8` now**
 > (Apple only shows it once). Also copy the **Issuer ID** (top of the page) and the
