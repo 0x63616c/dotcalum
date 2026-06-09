@@ -23,12 +23,17 @@ read -rp "Apple ID (developer account email): " APPLE_ID
 [ -n "$APPLE_ID" ] || { echo "FATAL: empty Apple ID" >&2; exit 1; }
 
 echo "Running fastlane spaceauth — enter your Apple password + 2FA code when prompted."
-# Prompts go to the terminal (2>/dev/tty); the `export FASTLANE_SESSION=...` line
-# is printed to stdout and captured here.
-SESSION_OUT="$(fastlane spaceauth -u "$APPLE_ID" 2>/dev/tty)"
-# shellcheck disable=SC2086
-eval "$(printf '%s\n' "$SESSION_OUT" | grep -E '^export FASTLANE_SESSION=')"
-[ -n "${FASTLANE_SESSION:-}" ] || { echo "FATAL: spaceauth produced no session" >&2; exit 1; }
+# spaceauth goes non-interactive (skips the password prompt) if its stdout isn't a
+# real terminal, so we can't just capture $(...). Run it inside a pseudo-terminal
+# via `script` (keeps it interactive) and read the session from the typescript.
+LOG="$(mktemp -t spaceauth)"
+trap 'rm -f "$LOG"' EXIT
+script -q "$LOG" fastlane spaceauth -u "$APPLE_ID" || true
+
+# Extract the single-quoted session from `export FASTLANE_SESSION='...'` (greedy to
+# the final quote; the YAML value spans lines). Strip the pty's carriage returns.
+FASTLANE_SESSION="$(perl -0777 -ne "print \$1 if /FASTLANE_SESSION='(.*)'/s" "$LOG" | tr -d '\r')"
+[ -n "$FASTLANE_SESSION" ] || { echo "FATAL: spaceauth produced no session (auth fail or cancelled?)" >&2; exit 1; }
 
 op item edit "$ITEM" --vault "$VAULT" \
   "apple-id[text]=$APPLE_ID" \
