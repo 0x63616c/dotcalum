@@ -164,6 +164,21 @@ Commit the Fastfile/Matchfile/Gemfile/workflow (no secrets). A release is
 triggered by pushing a tag `vX.Y.Z`. If the repo is **private**, warn that macOS
 runner minutes bill at 10x; public repos are free.
 
+### 7. TestFlight readiness (Capacitor/iOS)
+- **Export compliance:** add `ITSAppUsesNonExemptEncryption = false` to
+  `ios/App/App/Info.plist` (true only if the app uses non-exempt crypto; standard
+  HTTPS is exempt). Without it every build shows "Missing Compliance" and can't be
+  distributed until answered by hand. Set it once in the shell.
+- **Upload resilience:** altool often uploads the binary fine, then 500s on a
+  follow-up status call; the `release` lane catches that and verifies the build
+  actually landed (App Store Connect) before failing — so a real upload isn't
+  reported as a red run.
+- **Inviting yourself:** internal testing needs no Beta App Review. Add yourself
+  (an App Store Connect user) to an Internal Testing group once at
+  App Store Connect → <app> → TestFlight → Internal Testing; builds then appear in
+  the TestFlight app on your device within minutes of processing. (Per-app,
+  one-time; can be scripted via the ASC API but the UI is fastest.)
+
 ## What "done" looks like
 Calum pushes `v0.1.0` → CI builds the web app, syncs Capacitor, pulls the shared
 cert + this app's profile via match, builds, and uploads to TestFlight — zero

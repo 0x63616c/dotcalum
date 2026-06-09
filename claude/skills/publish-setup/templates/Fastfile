@@ -3,6 +3,7 @@ default_platform(:ios)
 require "base64"
 require "fileutils"
 require "tmpdir"
+require "spaceship"
 
 # Fastfile for publish-setup (fastlane match flow).
 #
@@ -124,7 +125,8 @@ platform :ios do
       app_identifier: bundle_id,
       initial_build_number: ENV.fetch("INITIAL_BUILD_NUMBER", "0").to_i
     )
-    increment_build_number(build_number: latest + 1, xcodeproj: ios_project)
+    target_build = (latest + 1).to_s
+    increment_build_number(build_number: target_build, xcodeproj: ios_project)
 
     build_app(
       project: ios_project,
@@ -136,10 +138,29 @@ platform :ios do
       codesigning_identity: "Apple Distribution"
     )
 
-    upload_to_testflight(
-      api_key: asc_key,
-      skip_waiting_for_build_processing: true,
-      skip_submission: true
-    )
+    begin
+      upload_to_testflight(
+        api_key: asc_key,
+        skip_waiting_for_build_processing: true,
+        skip_submission: true
+      )
+    rescue => e
+      # altool routinely uploads the binary fine but then 500s on a follow-up
+      # status call ("RETRIEVE UPLOAD OPERATIONS"), which fastlane reports as a
+      # failure. Verify the build actually landed before failing the run.
+      UI.important("upload_to_testflight raised: #{e.message}")
+      UI.important("Verifying whether build #{target_build} reached App Store Connect anyway...")
+      landed = false
+      6.times do
+        sleep(20)
+        app = (Spaceship::ConnectAPI::App.find(bundle_id) rescue nil)
+        if app && app.get_builds.any? { |b| b.version.to_s == target_build }
+          landed = true
+          break
+        end
+      end
+      raise e unless landed
+      UI.success("Build #{target_build} is in App Store Connect — transient upload error ignored.")
+    end
   end
 end
