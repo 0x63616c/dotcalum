@@ -38,9 +38,14 @@ echo "==> match repo: $MATCH_GIT_URL"
   || { echo "FATAL: ASC key incomplete in 1Password. Run save-asc-key.sh first." >&2; exit 1; }
 [ -n "$MATCH_PASSWORD" ] || { echo "FATAL: match password missing in 1Password." >&2; exit 1; }
 
+# Apple ID (non-secret) → used as the internal TestFlight tester, and as
+# FASTLANE_USER for app-record creation when a session is also present.
+if AID="$(apple_id)" && [ -n "$AID" ]; then
+  export TESTFLIGHT_TESTER="$AID"
+fi
 # Optional Apple ID session → lets setup_ios create the App Store Connect app
 # record headlessly (Apple's API can't). Absent/expired → the lane warns instead.
-if AID="$(apple_id)" && [ -n "$AID" ] && FS="$(fastlane_session)" && [ -n "$FS" ]; then
+if [ -n "${AID:-}" ] && FS="$(fastlane_session)" && [ -n "$FS" ]; then
   export FASTLANE_USER="$AID" FASTLANE_SESSION="$FS"
   echo "==> Apple ID session present (will create the app record if missing)"
 else
@@ -61,5 +66,9 @@ export BUNDLE_ID APP_NAME
 echo "==> fastlane ios setup_ios ($BUNDLE_ID)"
 bundle exec fastlane ios setup_ios
 
-echo "==> done. Profile for $BUNDLE_ID minted into the certificates repo (cert reused)."
+# Internal TestFlight group + self-invite, so every build appears with no clicks.
+echo "==> fastlane ios setup_testflight ($BUNDLE_ID)"
+bundle exec fastlane ios setup_testflight
+
+echo "==> done. Profile minted (cert reused) + internal TestFlight ready for $BUNDLE_ID."
 echo "    Next: sync-secrets.sh <owner/repo> $BUNDLE_ID <team_id>"

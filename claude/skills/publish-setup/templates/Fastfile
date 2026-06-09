@@ -104,6 +104,43 @@ platform :ios do
     match(type: "appstore", api_key: asc_key, app_identifier: bundle_id, readonly: false)
   end
 
+  # Run ONCE per app (setup-app.sh calls it). Creates an internal TestFlight group
+  # set to receive ALL builds and adds the account holder as a tester, so every
+  # future tagged build appears in TestFlight with no clicks. Key-based (no Apple
+  # ID session needed). Internal testers must be App Store Connect users; the
+  # account holder qualifies. Set TESTFLIGHT_TESTER to the tester email.
+  desc "Create an internal TestFlight group + add the account holder as a tester"
+  lane :setup_testflight do
+    asc_key # sets the ConnectAPI token
+    app = Spaceship::ConnectAPI::App.find(bundle_id)
+    UI.user_error!("No app record for #{bundle_id} — run setup_ios first") unless app
+
+    group_name = ENV.fetch("TESTFLIGHT_GROUP", "Internal")
+    group = app.get_beta_groups.find { |g| g.name == group_name }
+    if group.nil?
+      UI.message("Creating internal TestFlight group '#{group_name}' (auto-receives all builds)")
+      group = app.create_beta_group(
+        group_name: group_name,
+        is_internal_group: true,
+        has_access_to_all_builds: true
+      )
+    end
+
+    email = (ENV["TESTFLIGHT_TESTER"] || ENV["FASTLANE_USER"]).to_s
+    if email.empty?
+      UI.important("No tester email (TESTFLIGHT_TESTER/FASTLANE_USER) — skipping tester add.")
+    elsif app.get_beta_testers(filter: { email: email }).any?
+      UI.message("#{email} is already a tester.")
+    else
+      UI.message("Adding internal tester #{email} to '#{group_name}'")
+      group.post_bulk_beta_tester_assignments(beta_testers: [
+        { email: email, firstName: ENV.fetch("TESTFLIGHT_TESTER_FIRST", "Internal"),
+          lastName: ENV.fetch("TESTFLIGHT_TESTER_LAST", "Tester") }
+      ])
+    end
+    UI.success("Internal TestFlight ready: group '#{group_name}'#{email.empty? ? '' : ", tester #{email}"}.")
+  end
+
   desc "Build and upload to TestFlight"
   lane :release do
     setup_ci # ephemeral CI keychain; no-op locally
