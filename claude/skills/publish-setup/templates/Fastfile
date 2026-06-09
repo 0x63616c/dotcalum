@@ -37,15 +37,46 @@ platform :ios do
   # (readonly:false so it creates the profile if absent). setup-app.sh calls this.
   desc "Register a new app + mint its profile against the shared match repo"
   lane :setup_ios do
-    # Calling asc_key sets the API key in lane context; produce reads it from
-    # there (it has no api_key: param), and match takes it explicitly.
-    api = asc_key
-    produce(
-      app_identifier: bundle_id,
-      app_name: ENV.fetch("APP_NAME", bundle_id),
-      skip_itc: false
+    require "spaceship"
+    require "base64"
+
+    # Authenticate Spaceship with the App Store Connect API key (NO Apple ID, no
+    # 2FA). produce's Developer-Portal path otherwise demands a username; doing
+    # bundle-id + app-record creation over the API key avoids that entirely.
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key: Base64.decode64(ENV.fetch("ASC_KEY_CONTENT"))
     )
-    match(type: "appstore", api_key: api, app_identifier: bundle_id, readonly: false)
+
+    name = ENV.fetch("APP_NAME", bundle_id)
+
+    # 1. Register the bundle id on the Developer Portal (idempotent) — match needs it.
+    unless Spaceship::ConnectAPI::BundleId.all.any? { |b| b.identifier == bundle_id }
+      UI.message("Registering bundle id #{bundle_id}")
+      Spaceship::ConnectAPI::BundleId.create(
+        name: name.gsub(/[^0-9A-Za-z ]/, ""),
+        identifier: bundle_id,
+        platform: Spaceship::ConnectAPI::Platform::IOS
+      )
+    end
+
+    # 2. Create the App Store Connect app record via the API (produce demands an
+    #    Apple ID even with skip_devcenter, so go straight through ConnectAPI).
+    if (Spaceship::ConnectAPI::App.find(bundle_id) rescue nil).nil?
+      UI.message("Creating App Store Connect app record for #{bundle_id}")
+      Spaceship::ConnectAPI::App.create(
+        name: name,
+        version_string: "1.0",
+        sku: bundle_id,
+        primary_locale: "en-US",
+        bundle_id: bundle_id,
+        platforms: ["IOS"]
+      )
+    end
+
+    # 3. Mint this app's provisioning profile, reusing the shared distribution cert.
+    match(type: "appstore", api_key: asc_key, app_identifier: bundle_id, readonly: false)
   end
 
   desc "Build and upload to TestFlight"
