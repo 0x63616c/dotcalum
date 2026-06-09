@@ -67,6 +67,20 @@ Run, in the target repo:
   - bare web app, no native shell → tell Calum it needs Capacitor first; offer to
     add it (out of v1 scope — confirm before doing).
 
+**Already provisioned? Switch to Day-2 mode.** If detection finds the shell,
+Fastfile/Matchfile, CI workflow, and GitHub secrets all in place, the ask is
+maintenance, not setup — do NOT re-run steps 1-6. Instead:
+- Check the **last release workflow run** (`gh run list --workflow=<release yml>`)
+  before declaring the pipeline healthy — a red latest run is the real work.
+  Diff the last green vs first red run's tool versions (fastlane, Xcode, runner
+  image); an uncommitted/floating Gemfile.lock is the usual culprit.
+- Verify the **ASC app record name** matches what Calum expects (it can lag a
+  repo rename — control-center's record still said "The Workflow Engine" months
+  after the repo moved on). Rename via `PATCH v1/appInfoLocalizations` (see 0.5).
+- Confirm the latest build actually reached TestFlight via the ASC API
+  (`GET v1/builds?filter[app]=<id>&sort=-uploadedDate` → `processingState=VALID`),
+  not just a green CI run.
+
 ### 0.5. The up-front interview (one batch, before any automation)
 Immediately after detection, ask Calum everything only a human can supply — in a
 single round of questions, not drip-fed across steps. Then start automating while
@@ -93,6 +107,14 @@ he works the manual bits. The full human-only set:
   appstoreconnect.apple.com → Apps → (+) → New App. Required before the first
   TestFlight upload. If `fastlane_session` is absent, front-load (a) or (b).
 - **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.
+  **App Store Connect names are globally unique across ALL Apple accounts** —
+  even unshipped reserved names collide (409 `DUPLICATE.DIFFERENT_ACCOUNT`,
+  freed only by a trademark claim). Generic names ("Control Center") are
+  usually squatted, so get a fallback name from Calum in this same interview.
+  Only the ASC/TestFlight-visible name is constrained; `CFBundleDisplayName`
+  (home screen) has no uniqueness rule. Renaming later goes through
+  `PATCH v1/appInfoLocalizations/<loc_id>` (the name lives on the appInfo
+  *localization*, not the app resource).
 - **Capacitor (web-app repos only)** — if there's no native shell, confirm adding
   one (step 0 detection). Don't silently scaffold.
 - **Hosted API base URL (Capacitor/iOS)** — a bundled offline shell can't use a
@@ -160,7 +182,13 @@ the web app + `cap sync`, runs `match` readonly, and ships to TestFlight on a
 containing `.p8`/`.p12` material or `PRIVATE KEY` blobs.
 
 ### 6. Commit + flag minutes
-Commit the Fastfile/Matchfile/Gemfile/workflow (no secrets). A release ships on
+Commit the Fastfile/Matchfile/Gemfile/workflow (no secrets) — **and the
+`Gemfile.lock`**: run `bundle lock` and commit it so CI never floats gem
+versions. An uncommitted lock let control-center float onto fastlane 2.236.0,
+whose altool upload rejects IPAs with "format error (259)" and killed every
+TestFlight upload (CC-84ti). The template Gemfile pins fastlane for the same
+reason; widen the bound only after verifying a real `upload_to_testflight` run.
+A release ships on
 every push to `main` that touches the app code / native config (the workflow's
 `paths:` — no git tags, no version bump; the build number comes from TestFlight).
 Tune `paths:` to the repo layout. If the repo is **private**, warn that macOS

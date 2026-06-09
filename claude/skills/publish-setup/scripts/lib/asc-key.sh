@@ -12,23 +12,37 @@
 
 ASC_VAULT="${ASC_VAULT:-Homelab}"
 _ASC_ITEM=""
-# Resolve this lib's dir to an absolute path ONCE at source time; BASH_SOURCE is
-# unreliable inside functions / command substitutions.
-_ASC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve this lib's dir to an absolute path ONCE at source time. Must work when
+# sourced from zsh too (Claude Code's Bash tool runs zsh): BASH_SOURCE is empty
+# there, which used to resolve _ASC_LIB_DIR to the *cwd* and silently break
+# autodiscovery ("no App Store Connect API key" with a perfectly good item).
+if [ -n "${BASH_VERSION:-}" ]; then
+  _ASC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  _ASC_LIB_DIR="$(cd "$(dirname "$(eval 'printf %s "${(%):-%x}"')")" && pwd)"
+else
+  _ASC_LIB_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
 
 # Print the resolved item (id or title). Resolution order:
 #   1. $ASC_OP_ITEM explicit override
-#   2. conventional item `asc-api-key`
+#   2. conventional items: `asc-api-key` (what save-asc-key.sh writes) or
+#      `App Store Connect API` (the pre-existing key in the Homelab vault)
 #   3. autodiscover: an API Credential item in the vault carrying a *.p8
 #      (preferring titles that look like an ASC key).
 asc_resolve() {
   [ -n "$_ASC_ITEM" ] && { printf '%s' "$_ASC_ITEM"; return 0; }
-  local item=""
+  local item="" title
   if [ -n "${ASC_OP_ITEM:-}" ]; then
     item="$ASC_OP_ITEM"
-  elif op item get "asc-api-key" --vault "$ASC_VAULT" >/dev/null 2>&1; then
-    item="asc-api-key"
   else
+    for title in "asc-api-key" "App Store Connect API"; do
+      if op item get "$title" --vault "$ASC_VAULT" >/dev/null 2>&1; then
+        item="$title"; break
+      fi
+    done
+  fi
+  if [ -z "$item" ]; then
     item="$(op item list --vault "$ASC_VAULT" --categories "API Credential" --format json 2>/dev/null \
       | ASC_VAULT="$ASC_VAULT" python3 "$_ASC_LIB_DIR/asc-pick.py" 2>/dev/null)"
   fi
