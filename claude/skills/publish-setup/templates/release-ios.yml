@@ -1,11 +1,22 @@
 name: Release iOS (TestFlight)
 
-# Triggered by pushing a version tag, e.g. `git tag v0.1.0 && git push --tags`.
-# Or run manually from the Actions tab (workflow_dispatch).
+# Ships a new TestFlight build on every push to main that touches the app's
+# code or native/signing config — no git tags. The build number is derived from
+# TestFlight (latest + 1), so no version bump is needed either. Adjust `paths`
+# to match the repo layout. Also runnable manually (workflow_dispatch), plus a
+# monthly cron to refresh the 90-day TestFlight build expiry.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "web/**"
+      - "ios/**"
+      - "capacitor.config.*"
+      - "fastlane/**"
+      - ".github/workflows/release-ios.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "0 12 1 * *" # 1st of each month, noon UTC — keep the build fresh
 
 jobs:
   testflight:

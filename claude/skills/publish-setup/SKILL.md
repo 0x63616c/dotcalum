@@ -160,8 +160,10 @@ the web app + `cap sync`, runs `match` readonly, and ships to TestFlight on a
 containing `.p8`/`.p12` material or `PRIVATE KEY` blobs.
 
 ### 6. Commit + flag minutes
-Commit the Fastfile/Matchfile/Gemfile/workflow (no secrets). A release is
-triggered by pushing a tag `vX.Y.Z`. If the repo is **private**, warn that macOS
+Commit the Fastfile/Matchfile/Gemfile/workflow (no secrets). A release ships on
+every push to `main` that touches the app code / native config (the workflow's
+`paths:` — no git tags, no version bump; the build number comes from TestFlight).
+Tune `paths:` to the repo layout. If the repo is **private**, warn that macOS
 runner minutes bill at 10x; public repos are free.
 
 ### 7. TestFlight readiness (Capacitor/iOS)
@@ -180,6 +182,7 @@ runner minutes bill at 10x; public repos are free.
   one-time; can be scripted via the ASC API but the UI is fastest.)
 
 ## What "done" looks like
-Calum pushes `v0.1.0` → CI builds the web app, syncs Capacitor, pulls the shared
-cert + this app's profile via match, builds, and uploads to TestFlight — zero
-further manual steps.
+Calum pushes app-code/config changes to `main` → CI builds the web app, syncs
+Capacitor, pulls the shared cert + this app's profile via match, builds, and
+uploads to TestFlight (auto-distributed to the internal group he's in) — zero
+further manual steps, no tagging.
