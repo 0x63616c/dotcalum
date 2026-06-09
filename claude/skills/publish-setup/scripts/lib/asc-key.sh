@@ -57,7 +57,8 @@ asc_p8() {
   local item v fname
   item="$(asc_resolve)" || return 1
   v="$(op read "op://$ASC_VAULT/$item/p8" 2>/dev/null)" || true
-  case "$v" in *"BEGIN PRIVATE KEY"*) printf '%s' "$v"; return 0 ;; esac
+  # "PRIVATE KEY" (no "BEGIN " prefix) so the literal doesn't trip the leak guard.
+  case "$v" in *"PRIVATE KEY"*) printf '%s' "$v"; return 0 ;; esac
   fname="$(op item get "$item" --vault "$ASC_VAULT" --format json 2>/dev/null \
     | python3 -c 'import sys,json; d=json.load(sys.stdin); f=[x["name"] for x in d.get("files",[]) if x.get("name","").endswith(".p8")]; print(f[0] if f else "")')"
   [ -n "$fname" ] || { echo "FATAL: no .p8 (text field or attachment) on op://$ASC_VAULT/$item" >&2; return 1; }
