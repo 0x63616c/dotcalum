@@ -15,11 +15,15 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 case "$PLATFORM" in ios|macos) ;; *) echo "FATAL: platform must be ios|macos" >&2; exit 1 ;; esac
 
 # --- ASC API key from 1Password -> env for fastlane -------------------------
-export ASC_ISSUER_ID="$(op read "op://$VAULT/asc-api-key/issuer-id")"
-export ASC_KEY_ID="$(op read "op://$VAULT/asc-api-key/key-id")"
-ASC_KEY_P8_RAW="$(op read "op://$VAULT/asc-api-key/p8")"
+# Resolver finds the key whether it's the skill's `asc-api-key` item or a
+# pre-existing ASC key (different title, space-labelled fields, .p8 attachment).
+export ASC_VAULT="$VAULT"
+source "$SKILL_DIR/scripts/lib/asc-key.sh"
+echo "==> ASC key: op://$VAULT/$(asc_resolve)"
+export ASC_ISSUER_ID="$(asc_issuer_id)"
+export ASC_KEY_ID="$(asc_key_id)"
 # Fastfile reads the key content base64-encoded (newline-safe across env).
-export ASC_KEY_P8="$(printf '%s' "$ASC_KEY_P8_RAW" | base64)"
+export ASC_KEY_P8="$(asc_p8_base64)"
 [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_KEY_P8" ] \
   || { echo "FATAL: ASC key missing in 1Password. Run save-asc-key.sh first." >&2; exit 1; }
 

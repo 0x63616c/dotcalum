@@ -12,6 +12,9 @@
 
 ASC_VAULT="${ASC_VAULT:-Homelab}"
 _ASC_ITEM=""
+# Resolve this lib's dir to an absolute path ONCE at source time; BASH_SOURCE is
+# unreliable inside functions / command substitutions.
+_ASC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Print the resolved item (id or title). Resolution order:
 #   1. $ASC_OP_ITEM explicit override
@@ -27,7 +30,7 @@ asc_resolve() {
     item="asc-api-key"
   else
     item="$(op item list --vault "$ASC_VAULT" --categories "API Credential" --format json 2>/dev/null \
-      | ASC_VAULT="$ASC_VAULT" python3 "$(dirname "${BASH_SOURCE[0]}")/asc-pick.py" 2>/dev/null)"
+      | ASC_VAULT="$ASC_VAULT" python3 "$_ASC_LIB_DIR/asc-pick.py" 2>/dev/null)"
   fi
   [ -n "$item" ] || { echo "FATAL: no App Store Connect API key in op://$ASC_VAULT (run save-asc-key.sh)" >&2; return 1; }
   _ASC_ITEM="$item"
