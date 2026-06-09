@@ -26,6 +26,13 @@ Design spec: `dotcalum/docs/superpowers/specs/2026-06-08-publish-setup-skill-des
 
 ## Checklist (work top to bottom; create a TodoWrite item per step)
 
+> **Front-load every human-only input before you automate anything.** Steps 0 and
+> 0.5 below come first and gather ALL human-gated inputs in one batch, so Calum can
+> work them in parallel (downloading the ASC key, confirming enrollment) while you
+> build the rest. Do NOT start step 3+ automation and only later realize you need a
+> credential — that strands Calum waiting. The rule: detect, then ask for
+> everything at once, then go heads-down.
+
 ### 0. Detect state
 Run, in the target repo:
 - `command -v fastlane gh op` — tooling present?
@@ -36,6 +43,27 @@ Run, in the target repo:
   - `capacitor.config.*` / `ios/App/App.xcodeproj` → **ios** (TestFlight path).
   - bare web app, no native shell → tell Calum it needs Capacitor first; offer to
     add it (out of v1 scope — confirm before doing).
+
+### 0.5. The up-front interview (one batch, before any automation)
+Immediately after detection, ask Calum everything only a human can supply — in a
+single round of questions, not drip-fed across steps. Then start automating while
+he works the manual bits. The full human-only set:
+- **Apple Developer Program** — enrolled? (gates everything; see step 1.)
+- **App Store Connect API key** — only if `asc-api-key` not already in 1Password.
+  Hand him the ASC path + `save-asc-key.sh` command NOW so he can download the
+  `.p8` and run the script while you build (see step 2). This is the most common
+  thing agents forget to front-load.
+- **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.
+- **Capacitor (web-app repos only)** — if there's no native shell, confirm adding
+  one (step 0 detection). Don't silently scaffold.
+- **Hosted API base URL (Capacitor/iOS)** — a bundled offline shell can't use a
+  relative `/api` path; it needs an absolute backend. Ask for the hosted URL, or
+  confirm "not hosted yet" and wire it as a build-time `VITE_API_BASE` (Actions
+  variable) with a documented placeholder.
+
+Everything below this line is yours to automate. The human-gated items (1, 2) only
+*block* the steps that consume them (3, 4) — keep building everything else
+(Capacitor shell, CI files, docs) in parallel while Calum handles them.
 
 ### 1. Apple Developer Program (only if not enrolled)
 Test enrollment by attempting an authenticated call (e.g. `setup-app.sh` dry step,
