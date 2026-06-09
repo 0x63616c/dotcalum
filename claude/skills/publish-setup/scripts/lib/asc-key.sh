@@ -75,7 +75,25 @@ asc_p8_base64() { asc_p8 | base64; }
 MATCH_GIT_URL_DEFAULT="${MATCH_GIT_URL_DEFAULT:-https://github.com/0x63616c/certificates.git}"
 
 match_password() { _asc_field "match-password" "match password" "MATCH_PASSWORD"; }
-match_git_auth() { _asc_field "match-git-auth" "match git auth" "match-git-basic-authorization" "MATCH_GIT_BASIC_AUTHORIZATION"; }
+
+# MATCH_GIT_BASIC_AUTHORIZATION = base64("user:token") for cloning the certs repo.
+# Prefer an explicitly-stored value; otherwise derive it from the GitHub PAT
+# already in 1Password (item GITHUB_PAT_ITEM, default "GitHub Personal Access
+# Token", field GITHUB_PAT_FIELD/"token"), so nothing extra needs saving.
+GITHUB_PAT_ITEM="${GITHUB_PAT_ITEM:-GitHub Personal Access Token}"
+GITHUB_PAT_FIELD="${GITHUB_PAT_FIELD:-token}"
+GITHUB_USER="${GITHUB_USER:-0x63616c}"
+match_git_auth() {
+  local item v tok
+  item="$(asc_resolve)" || return 1
+  for label in "match-git-auth" "match git auth" "match-git-basic-authorization"; do
+    v="$(op read "op://$ASC_VAULT/$item/$label" 2>/dev/null)" || true
+    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  done
+  tok="$(op read "op://$ASC_VAULT/$GITHUB_PAT_ITEM/$GITHUB_PAT_FIELD" 2>/dev/null)" || true
+  [ -n "$tok" ] || { echo "FATAL: no match git auth and no GitHub PAT in op://$ASC_VAULT/$GITHUB_PAT_ITEM" >&2; return 1; }
+  printf '%s:%s' "$GITHUB_USER" "$tok" | base64 | tr -d '\n'
+}
 match_git_url() {
   local item v label
   item="$(asc_resolve)" || return 1

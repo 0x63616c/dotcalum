@@ -68,10 +68,11 @@ he works the manual bits. The full human-only set:
   `save-asc-key.sh` command NOW so he can download the `.p8` and run the script
   while you build (see step 2). This is the most common thing agents forget to
   front-load.
-- **match git auth** — only if `match_git_auth` (in `asc-key.sh`) finds none in
-  1Password. It's a one-time, account-level GitHub token (`repo`/read scope) for
-  the certificates repo, stored by `save-match-git-auth.sh`. `match password` is
-  usually already on the ASC item; verify with `match_password`.
+- **match git auth** — usually NOT human-gated: `match_git_auth` auto-derives
+  `base64("0x63616c:<token>")` from the GitHub PAT already in 1Password (item
+  `GitHub Personal Access Token`). Only run `save-match-git-auth.sh` if you want a
+  dedicated/different token. `match password` is already on the ASC item (verify
+  with `match_password`).
 - **Apple Team ID** — needed for `update_code_signing_settings` (e.g.
   `X9E4HG27NK`). Confirm once; passed to `sync-secrets.sh` as a GitHub variable.
 - **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.

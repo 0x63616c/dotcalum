@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Store the fastlane match git authorization (for cloning the private certificates
-# repo) into 1Password, on the same item that holds the ASC key + match password.
-# One-time-ever, account-level. Secret capture happens here in the terminal, never
-# in the Claude chat. MATCH_GIT_BASIC_AUTHORIZATION is base64("username:token").
+# OPTIONAL override. By default match_git_auth (lib/asc-key.sh) already derives
+# MATCH_GIT_BASIC_AUTHORIZATION = base64("username:token") from the GitHub PAT
+# already in 1Password — so you normally do NOT need this script. Run it only to
+# pin a dedicated/different token for cloning the private certificates repo.
+# It stores the value on the same item that holds the ASC key + match password.
+# Secret capture happens here in the terminal, never in the Claude chat.
 
 VAULT="Homelab"
 export ASC_VAULT="$VAULT"
