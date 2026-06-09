@@ -67,3 +67,21 @@ asc_p8() {
 
 # Convenience: the .p8 base64-encoded (single line, env/secret safe).
 asc_p8_base64() { asc_p8 | base64; }
+
+# --- fastlane match secrets (shared signing via the certificates repo) -------
+# These live on the SAME resolved item as the ASC key: `match password` is
+# usually already present; the certificates-repo git auth + url are written by
+# save-match-git-auth.sh. git_url falls back to the conventional repo.
+MATCH_GIT_URL_DEFAULT="${MATCH_GIT_URL_DEFAULT:-https://github.com/0x63616c/certificates.git}"
+
+match_password() { _asc_field "match-password" "match password" "MATCH_PASSWORD"; }
+match_git_auth() { _asc_field "match-git-auth" "match git auth" "match-git-basic-authorization" "MATCH_GIT_BASIC_AUTHORIZATION"; }
+match_git_url() {
+  local item v
+  item="$(asc_resolve)" || return 1
+  for label in "match-git-url" "match git url" "MATCH_GIT_URL"; do
+    v="$(op read "op://$ASC_VAULT/$item/$label" 2>/dev/null)" || true
+    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  done
+  printf '%s' "$MATCH_GIT_URL_DEFAULT"
+}

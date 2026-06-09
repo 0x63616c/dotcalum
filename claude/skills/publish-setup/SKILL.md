@@ -14,14 +14,23 @@ Design spec: `dotcalum/docs/superpowers/specs/2026-06-08-publish-setup-skill-des
 
 ## Operating rules
 
-- **1Password is the source of truth.** Vault is always `Homelab`. Certs/keys live
-  there; GitHub secrets are a synced copy pushed by `sync-secrets.sh`. CI never
-  touches 1Password (no service account).
+- **Shared signing via `fastlane match` (git backend).** ONE Apple distribution
+  certificate signs every app in the account (Apple caps active certs at ~2-3, so
+  never mint per-app). It lives encrypted in a central git repo
+  (`MATCH_GIT_URL`, default `github.com/0x63616c/certificates.git`). Each new app
+  reuses that cert and only mints its own **provisioning profile** into the same
+  repo. match has no 1Password storage backend — that's why the cert is in git —
+  but the match **passphrase**, the **ASC API key**, and the repo's **git auth**
+  all live in 1Password.
+- **1Password is the source of truth.** Vault is always `Homelab`. ASC key,
+  `match password`, `match-git-url`, `match-git-auth` live on one item (the ASC
+  key item). GitHub Actions secrets/variables are a synced copy pushed by
+  `sync-secrets.sh`. CI reads only GitHub, never 1Password.
 - **Secrets never enter the chat.** Capturing any credential happens in an
-  interactive terminal script (`scripts/save-asc-key.sh`), terminal → 1Password.
-  Never ask Calum to paste a `.p8`/`.p12` into the conversation.
-- **No `fastlane match`** (no 1Password backend). Certs are minted by
-  `fastlane cert`/`sigh`, stored in 1Password, synced to GitHub secrets.
+  interactive terminal script (`save-asc-key.sh`, `save-match-git-auth.sh`),
+  terminal → 1Password. Never ask Calum to paste a `.p8` / token into the chat.
+- **iOS/TestFlight only** for now. The macOS notarize path predated this match
+  rewrite and is not yet reworked.
 - **Idempotent.** Every script is safe to re-run; second run is a near no-op.
 
 ## Checklist (work top to bottom; create a TodoWrite item per step)
@@ -59,6 +68,12 @@ he works the manual bits. The full human-only set:
   `save-asc-key.sh` command NOW so he can download the `.p8` and run the script
   while you build (see step 2). This is the most common thing agents forget to
   front-load.
+- **match git auth** — only if `match_git_auth` (in `asc-key.sh`) finds none in
+  1Password. It's a one-time, account-level GitHub token (`repo`/read scope) for
+  the certificates repo, stored by `save-match-git-auth.sh`. `match password` is
+  usually already on the ASC item; verify with `match_password`.
+- **Apple Team ID** — needed for `update_code_signing_settings` (e.g.
+  `X9E4HG27NK`). Confirm once; passed to `sync-secrets.sh` as a GitHub variable.
 - **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.
 - **Capacitor (web-app repos only)** — if there's no native shell, confirm adding
   one (step 0 detection). Don't silently scaffold.
