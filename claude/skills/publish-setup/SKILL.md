@@ -32,6 +32,16 @@ Design spec: `dotcalum/docs/superpowers/specs/2026-06-08-publish-setup-skill-des
 - **iOS/TestFlight only** for now. The macOS notarize path predated this match
   rewrite and is not yet reworked.
 - **Idempotent.** Every script is safe to re-run; second run is a near no-op.
+- **The agent drives — don't narrate commands for Calum to run.** Gather required
+  info as early as possible (step 0.5), then YOU run `setup-app.sh`,
+  `sync-secrets.sh`, the tag, and all verification yourself, and report results.
+  Ask Calum directly for any non-secret value you need (Apple ID, Team ID, bundle
+  id). The ONLY things he runs are the interactive secret-capture scripts
+  (`save-asc-key.sh`, `save-apple-session.sh`, `save-match-git-auth.sh`) — because
+  they need a password / 2FA / token typed into a terminal, which is truly secret
+  and can't pass through you. Everything else is yours. Verify each step (resolve
+  the 1P item, watch the CI run, confirm the build in App Store Connect) rather
+  than assuming it worked.
 
 ## Checklist (work top to bottom; create a TodoWrite item per step)
 
@@ -75,12 +85,13 @@ he works the manual bits. The full human-only set:
   with `match_password`).
 - **Apple Team ID** — needed for `update_code_signing_settings` (e.g.
   `X9E4HG27NK`). Confirm once; passed to `sync-secrets.sh` as a GitHub variable.
-- **App Store Connect app record** — the ONE thing Apple's API genuinely cannot
-  do: the `apps` resource is GET/UPDATE only, no CREATE. `setup_ios` registers the
-  bundle id + mints the profile over the API, but the app record itself must be
-  created once by hand at appstoreconnect.apple.com → Apps → (+) → New App (name +
-  bundle id + iOS). Required before the first TestFlight upload — front-load it so
-  Calum does it while CI builds.
+- **App Store Connect app record** — Apple's API can't create apps (`apps` is
+  GET/UPDATE only). Two ways: (a) **automated** — if an Apple ID session is in
+  1Password (`fastlane_session`), `setup_ios` creates the record headlessly via
+  `produce`; seed it once with `save-apple-session.sh` (one 2FA, expires ~2-4
+  weeks, re-run when lapsed). (b) **manual** — create it at
+  appstoreconnect.apple.com → Apps → (+) → New App. Required before the first
+  TestFlight upload. If `fastlane_session` is absent, front-load (a) or (b).
 - **Bundle ID + app name** — default `co.worldwidewebb.<app>`; confirm once.
 - **Capacitor (web-app repos only)** — if there's no native shell, confirm adding
   one (step 0 detection). Don't silently scaffold.
@@ -123,12 +134,13 @@ path to the downloaded `.p8`, and writes all three into 1Password.
 - Copies `templates/Fastfile` + `templates/Matchfile` + `templates/Gemfile` into
   the repo if missing.
 - Reads the ASC key + match secrets from 1Password into env.
-- Runs `fastlane ios setup_ios`: registers the bundle ID via the ASC API
+- Runs `fastlane ios setup_ios`: (1) registers the bundle ID via the ASC API
   (Spaceship ConnectAPI — `produce` insists on an Apple ID even with the API key,
-  so it's bypassed), then `match(type: appstore, readonly: false)` **reuses the
-  shared distribution cert** and mints this app's profile into the certificates
-  repo. No new cert. It WARNS (not fails) if the App Store Connect app record is
-  missing — that record must be created by hand once (Apple API can't, see 0.5).
+  so the bundle id is bypassed to the key); (2) creates the App Store Connect app
+  record — headlessly via `produce` + the stored Apple ID session if present, else
+  WARNS with manual steps (Apple API can't create apps, see 0.5); (3)
+  `match(type: appstore, readonly: false)` **reuses the shared distribution cert**
+  and mints this app's profile into the certificates repo. No new cert.
 Bundle ID convention: `co.worldwidewebb.<app>` (confirm with Calum on first run).
 
 ### 4. Sync secrets + variables to GitHub

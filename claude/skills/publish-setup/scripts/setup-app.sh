@@ -38,6 +38,16 @@ echo "==> match repo: $MATCH_GIT_URL"
   || { echo "FATAL: ASC key incomplete in 1Password. Run save-asc-key.sh first." >&2; exit 1; }
 [ -n "$MATCH_PASSWORD" ] || { echo "FATAL: match password missing in 1Password." >&2; exit 1; }
 
+# Optional Apple ID session → lets setup_ios create the App Store Connect app
+# record headlessly (Apple's API can't). Absent/expired → the lane warns instead.
+if AID="$(apple_id)" && [ -n "$AID" ] && FS="$(fastlane_session)" && [ -n "$FS" ]; then
+  export FASTLANE_USER="$AID" FASTLANE_SESSION="$FS"
+  echo "==> Apple ID session present (will create the app record if missing)"
+else
+  echo "==> No Apple ID session in 1Password — app record must already exist, or"
+  echo "    run save-apple-session.sh to automate its creation."
+fi
+
 # --- Drop fastlane config into the repo if missing --------------------------
 mkdir -p fastlane
 [ -f fastlane/Fastfile ]  || cp "$SKILL_DIR/templates/Fastfile" fastlane/Fastfile
