@@ -1,5 +1,9 @@
 default_platform(:ios)
 
+require "base64"
+require "fileutils"
+require "tmpdir"
+
 # Fastfile for publish-setup (fastlane match flow).
 #
 # Signing is shared across every app in the account via fastlane match against a
