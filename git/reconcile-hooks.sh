@@ -35,6 +35,52 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OURS="$(git config --global --get core.hooksPath 2>/dev/null || true)"
 
+# Every git hook name we own (must match git/install.sh HOOK_NAMES). Kept here so the
+# content-integrity heal can verify each is still a symlink to our dispatcher.
+MANAGED_HOOKS=(
+  applypatch-msg pre-applypatch post-applypatch
+  pre-commit prepare-commit-msg commit-msg post-commit
+  pre-merge-commit post-merge pre-rebase
+  pre-push post-checkout post-rewrite
+  pre-auto-gc push-to-checkout sendemail-validate
+)
+
+# heal_global_dir [quiet]: guard the CONTENTS of our global hooks dir.
+#   reconcile_repo guards the POINTER (which dir owns core.hooksPath). But a tool's
+#   `install` (lefthook/husky/bd hooks install) that resolves to our GLOBAL
+#   core.hooksPath overwrites the _dispatch symlinks with its own scripts (renaming
+#   ours to <hook>.old). The pointer still reads "global = us", so reconcile_repo
+#   sees nothing wrong — yet the dispatcher is dead for EVERY repo on the machine.
+#   This restores any managed hook that is no longer a symlink to _dispatch.
+#   Fail-open: never errors out. The clobbering content is preserved as <hook>.clobbered
+#   for forensics; stale <hook>.old backups left by the tool are cleared.
+heal_global_dir() {
+  local quiet="${1:-}"
+  [ -n "$OURS" ] || return 0
+  [ -d "$OURS" ] || return 0
+  [ -e "$OURS/_dispatch" ] || return 0   # only heal a dir that is genuinely ours
+  local healed=0 h f
+  for h in "${MANAGED_HOOKS[@]}"; do
+    f="$OURS/$h"
+    if [ -L "$f" ] && [ "$(readlink "$f" 2>/dev/null)" = "_dispatch" ]; then
+      [ -L "$f.old" ] && rm -f "$f.old" 2>/dev/null   # clear tool's stale backup
+      continue
+    fi
+    if [ -e "$f" ] || [ -L "$f" ]; then
+      mv -f "$f" "$f.clobbered" 2>/dev/null || rm -f "$f" 2>/dev/null
+    fi
+    if ln -sfn _dispatch "$f" 2>/dev/null; then
+      healed=$((healed+1))
+      [ -L "$f.old" ] && rm -f "$f.old" 2>/dev/null
+      hooklog_step reconcile global heal "$h" 0 0
+    fi
+  done
+  if [ "$healed" -gt 0 ] && [ "$quiet" != quiet ]; then
+    echo "hooks: healed $healed clobbered hook(s) in global dispatcher dir ($OURS)"
+  fi
+  return 0
+}
+
 # reconcile_repo <repo-dir> [quiet]
 # Returns 0 always (fail-open). Captures a stray local core.hooksPath.
 reconcile_repo() {
@@ -108,10 +154,11 @@ status() {
 
 cmd="${1:-current}"
 case "$cmd" in
-  current)        shift || true; reconcile_repo "$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")" "${1:-}" ;;
-  --repo)         reconcile_repo "$2" "${3:-}" ;;
-  --all|--sweep)  shift || true; sweep "${QUIET:-}" "$@" ;;
+  current)        shift || true; heal_global_dir "${1:-}"; reconcile_repo "$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")" "${1:-}" ;;
+  --repo)         heal_global_dir "${3:-}"; reconcile_repo "$2" "${3:-}" ;;
+  --all|--sweep)  shift || true; heal_global_dir "${QUIET:-}"; sweep "${QUIET:-}" "$@" ;;
+  --heal)         heal_global_dir "${2:-}" ;;
   --restore)      restore_repo "${2:-$(git rev-parse --show-toplevel 2>/dev/null)}" ;;
   --status)       status ;;
-  *)              echo "usage: reconcile-hooks.sh [current [quiet] | --repo <dir> [quiet] | --all [roots...] | --restore [repo] | --status]" >&2; exit 2 ;;
+  *)              echo "usage: reconcile-hooks.sh [current [quiet] | --repo <dir> [quiet] | --all [roots...] | --heal [quiet] | --restore [repo] | --status]" >&2; exit 2 ;;
 esac

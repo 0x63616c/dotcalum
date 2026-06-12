@@ -46,3 +46,25 @@ if command -v bd >/dev/null 2>&1; then
     return $rc
   }
 fi
+
+# lefthook shim (PREVENTION): `lefthook install` writes to whatever core.hooksPath
+# resolves to. When our reconcile has unset a repo's local core.hooksPath, that
+# resolves to our GLOBAL dispatcher dir, so `lefthook install` overwrites the
+# _dispatch symlinks machine-wide (the exact outage this whole system exists to
+# prevent). Force install into the repo's OWN hooks dir by pinning a local
+# core.hooksPath for the duration of the install, then reconcile captures that
+# pointer back into hooks.delegate. Non-`install` subcommands pass straight through.
+# `command lefthook` inside hooks bypasses this (no recursion); the function only
+# exists in interactive shells. Heal-on-cd/git is the backstop for installs that
+# bypass this shim (e.g. bun postinstall invoking node_modules/.bin/lefthook directly).
+lefthook() {
+  if [ "${1:-}" = install ]; then
+    command git rev-parse --git-dir >/dev/null 2>&1 || { command lefthook "$@"; return $?; }
+    local hooksdir; hooksdir="$(command git rev-parse --absolute-git-dir 2>/dev/null)/hooks"
+    command git config --local core.hooksPath "$hooksdir" 2>/dev/null
+    command lefthook "$@"; local rc=$?
+    typeset -f _dotcalum_reconcile_cwd >/dev/null 2>&1 && _dotcalum_reconcile_cwd
+    return $rc
+  fi
+  command lefthook "$@"
+}

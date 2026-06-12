@@ -44,6 +44,21 @@ HANDLER_DIR="$HERE/handlers.d/$HOOK"
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
 scope="$(basename "${repo_root:-$PWD}")"
 
+# --- bare / worktree-less guard ----------------------------------------------
+# Some tools drive git inside an internal bare/worktree-less repo: dolt's
+# `refs/dolt/data` sync (`bd dolt push`) stages chunk files in a bare object store
+# and pushes from there. Git still fires hooks there, but a developer hook has
+# nothing to do (no checkout, no commit, no files to lint) AND the delegated tool
+# hard-crashes: lefthook's first move is `git rev-parse --show-toplevel`, which
+# errors "this operation must be run in a work tree" (exit 128) in a bare repo and
+# aborts the host tool's git op (this is what broke `bd dolt push`). So: if there is
+# no work tree, do nothing and succeed. Our managed hook set is all developer-side
+# (pre-commit/commit-msg/pre-push/...), none are server-side post-receive hooks, so
+# skipping when there's no work tree is always correct here.
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
+  exit 0
+fi
+
 # Hooks whose non-zero exit blocks the git operation.
 case "$HOOK" in
   pre-commit|prepare-commit-msg|commit-msg|pre-merge-commit|pre-rebase|pre-push|\
