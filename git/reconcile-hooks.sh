@@ -33,7 +33,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "$HERE/../lib/hooklog.sh" 2>/dev/null || { hooklog_now_ms() { echo 0; }; hooklog_step() { :; }; }
 
-OURS="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+# Our global dispatcher dir. Overridable via DOTCALUM_HOOKS_DIR so the hermetic
+# tests can exercise heal_global_dir against a throwaway dir (never the real one).
+OURS="${DOTCALUM_HOOKS_DIR:-$(git config --global --get core.hooksPath 2>/dev/null || true)}"
 
 # Every git hook name we own (must match git/install.sh HOOK_NAMES). Kept here so the
 # content-integrity heal can verify each is still a symlink to our dispatcher.
