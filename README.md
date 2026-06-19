@@ -26,6 +26,16 @@ See it live with `tail -f ~/.local/state/hooks/timing.jsonl | jq .`.
 | `claude/hooks/pre-session.sh` | Pre-session lifecycle hook. Runs once before every `claude`/`c`/`cc` launch (before the actual session starts), receives the launch args, best-effort (exit code doesn't block). Edit it to run anything you want before any session. |
 | `skills/install-claude-hooks/` | Skill + `install.sh` to symlink the wrapper sourcing, pre-session hook, `dispatch.sh`, and this skill into `~/.claude`, and run `wire-timing.sh`. Idempotent. |
 
+### cmux + OpenCode
+
+cmux file-managed settings and OpenCode's cmux plugin list are tracked here, while
+cmux's volatile session restore state stays local.
+
+| Path | What it does |
+|---|---|
+| `cmux/settings.json` | Symlink target for `~/.config/cmux/settings.json`. Stores stable cmux settings such as keyboard shortcuts. Do not track `~/.config/cmux/cmux.json`, it contains volatile `terminal.resumeCommands` session IDs. |
+| `opencode/opencode.json` | Symlink target for `~/.config/opencode/opencode.json`. Enables cmux's OpenCode restore and feed plugins with absolute file URLs to the cmux-managed plugin files. The plugin files themselves are installed/updated by `cmux hooks setup`, not tracked here. |
+
 ### Auto-push (continuous backup of this repo)
 
 A LaunchAgent that every 5 minutes (and once at each login/reboot) auto-commits any
@@ -78,4 +88,9 @@ ln -s "$PWD/claude/skills/writing-goals"                   ~/.claude/skills/writ
 
 # Statusline (then set statusLine.command to this path in ~/.claude/settings.json)
 ln -s "$PWD/claude/statusline-command.sh"                  ~/.claude/statusline-command.sh
+
+# cmux + OpenCode config
+mkdir -p ~/.config/cmux ~/.config/opencode
+ln -s "$PWD/cmux/settings.json"                            ~/.config/cmux/settings.json
+ln -s "$PWD/opencode/opencode.json"                        ~/.config/opencode/opencode.json
 ```
