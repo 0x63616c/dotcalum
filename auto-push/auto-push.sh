@@ -23,19 +23,24 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { log "not a git work tre
 branch="$(git symbolic-ref --quiet --short HEAD || true)"
 [ -n "$branch" ] || { log "detached HEAD in $REPO, skipping"; exit 0; }
 
-# Stage + commit only if the tree is actually dirty.
+# Stage + commit only if the tree is actually dirty, then push.
 if [ -n "$(git status --porcelain)" ]; then
   git add -A
+  committed=false
   if git -c core.hooksPath=/dev/null commit --no-verify -m "chore(autopush): snapshot $(date '+%F %T %Z')" >/dev/null 2>&1; then
     log "committed snapshot on $branch"
+    committed=true
   else
     log "nothing to commit on $branch (or commit failed)"
   fi
-fi
 
-# Push. `Everything up-to-date` exits 0, so the no-change case is a cheap no-op.
-if out="$(git push origin "$branch" 2>&1)"; then
-  log "push ok ($branch): ${out:-up-to-date}"
+  if [ "$committed" = true ]; then
+    if out="$(git push origin "$branch" 2>&1)"; then
+      log "push ok ($branch): ${out:-up-to-date}"
+    else
+      log "push FAILED ($branch) — will retry next tick: $out"
+    fi
+  fi
 else
-  log "push FAILED ($branch) — will retry next tick: $out"
+  log "tree clean on $branch, skipping"
 fi
