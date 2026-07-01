@@ -29,7 +29,8 @@ NEVER save to a project-local `memory/` dir while cwd is inside a worktree (e.g.
 
 ## Format inside CLAUDE.md or any doc
 
-- Bullet points or short paragraphs. No prose-walls.
-- Lead with the rule. Then "Why:" if non-obvious.
-- Forceful language for non-negotiables: ALL CAPS, "NEVER", "ALWAYS", "MUST".
+**BE BRUTALLY TERSE BY DEFAULT. Aim for ~10% of your first-draft length.** Write the memory, then cut 90%: drop rationale, examples, caveats, restated context. Keep only the rule and (if non-obvious) a ≤6-word "why". One fact = one line. If it needs more than 2 lines, it belongs in a linked doc, not inline.
+
+- Lead with the rule. No prose-walls, no hedging.
+- Forceful for non-negotiables: ALL CAPS, "NEVER", "ALWAYS", "MUST".
 - Link to docs / skills rather than inline-stuffing long patterns.
