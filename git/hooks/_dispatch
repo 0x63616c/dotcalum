@@ -99,7 +99,19 @@ fi
 # guard stops self-recursion if the captured dir somehow points back at us.
 delegate_dir="$(git config --get hooks.delegate 2>/dev/null || echo "")"
 if [ -n "$delegate_dir" ]; then
-  case "$delegate_dir" in /*) ;; *) delegate_dir="$(git rev-parse --show-toplevel 2>/dev/null)/$delegate_dir" ;; esac
+  # Resolve relative to the main repo root (git-common-dir's parent), NOT
+  # show-toplevel: in a worktree, show-toplevel is the worktree dir, whose
+  # .git is a file (not a directory), so a relative ".git/hooks" delegate
+  # would silently fail to resolve and the hook would be skipped.
+  case "$delegate_dir" in
+    /*) ;;
+    *)
+      common_dir="$(git rev-parse --git-common-dir 2>/dev/null || echo "")"
+      case "$common_dir" in ""|/*) ;; *) common_dir="$PWD/$common_dir" ;; esac
+      repo_root_for_delegate="$(cd "$common_dir/.." 2>/dev/null && pwd || echo "")"
+      delegate_dir="$repo_root_for_delegate/$delegate_dir"
+      ;;
+  esac
 else
   common_dir="$(git rev-parse --git-common-dir 2>/dev/null || echo "")"
   case "$common_dir" in ""|/*) ;; *) common_dir="$PWD/$common_dir" ;; esac
